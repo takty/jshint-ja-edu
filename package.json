@@ -1,20 +1,8 @@
 {
-<<<<<<< HEAD
   "name": "jshint-ja-edu",
-  "version": "2.9.6",
+  "version": "2.10.2",
   "description": "Japanese translation of JSHint messages for educational purpose",
   "author": "Takuto Yanagida",
-=======
-  "name": "jshint",
-  "version": "2.10.2",
-  "homepage": "http://jshint.com/",
-  "description": "Static analysis tool for JavaScript",
-  "author": {
-    "name": "Anton Kovalyov",
-    "email": "anton@kovalyov.net",
-    "url": "http://anton.kovalyov.net/"
-  },
->>>>>>> jshint-master
   "repository": {
     "type": "git",
     "url": "https://github.com/takty/jshint-ja-edu.git"
