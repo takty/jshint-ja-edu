@@ -550,8 +550,6 @@ exports.debuglog = function(set) {
   }
   return debugs[set];
 };
-<<<<<<< HEAD
-=======
 
 
 /**
@@ -916,321 +914,6 @@ function isString(arg) {
   return typeof arg === 'string';
 }
 exports.isString = isString;
->>>>>>> jshint-master
-
-function isSymbol(arg) {
-  return typeof arg === 'symbol';
-}
-exports.isSymbol = isSymbol;
-
-function isUndefined(arg) {
-  return arg === void 0;
-}
-exports.isUndefined = isUndefined;
-
-function isRegExp(re) {
-  return isObject(re) && objectToString(re) === '[object RegExp]';
-}
-exports.isRegExp = isRegExp;
-
-function isObject(arg) {
-  return typeof arg === 'object' && arg !== null;
-}
-exports.isObject = isObject;
-
-function isDate(d) {
-  return isObject(d) && objectToString(d) === '[object Date]';
-}
-exports.isDate = isDate;
-
-function isError(e) {
-  return isObject(e) &&
-      (objectToString(e) === '[object Error]' || e instanceof Error);
-}
-exports.isError = isError;
-
-function isFunction(arg) {
-  return typeof arg === 'function';
-}
-exports.isFunction = isFunction;
-
-function isPrimitive(arg) {
-  return arg === null ||
-         typeof arg === 'boolean' ||
-         typeof arg === 'number' ||
-         typeof arg === 'string' ||
-         typeof arg === 'symbol' ||  // ES6 symbol
-         typeof arg === 'undefined';
-}
-exports.isPrimitive = isPrimitive;
-
-exports.isBuffer = require('./support/isBuffer');
-
-function objectToString(o) {
-  return Object.prototype.toString.call(o);
-}
-
-
-function pad(n) {
-  return n < 10 ? '0' + n.toString(10) : n.toString(10);
-}
-
-
-var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
-              'Oct', 'Nov', 'Dec'];
-
-// 26 Feb 16:19:34
-function timestamp() {
-  var d = new Date();
-  var time = [pad(d.getHours()),
-              pad(d.getMinutes()),
-              pad(d.getSeconds())].join(':');
-  return [d.getDate(), months[d.getMonth()], time].join(' ');
-}
-
-
-// log is just a thin wrapper to console.log that prepends a timestamp
-exports.log = function() {
-  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
-};
-
-
-/**
- * Inherit the prototype methods from one constructor into another.
- *
- * The Function.prototype.inherits from lang.js rewritten as a standalone
- * function (not on Function.prototype). NOTE: If this file is to be loaded
- * during bootstrapping this function needs to be rewritten using some native
- * functions as prototype setup using normal JavaScript does not work as
- * expected during bootstrapping (see mirror.js in r114903).
- *
- * @param {function} ctor Constructor function which needs to inherit the
- *     prototype.
- * @param {function} superCtor Constructor function to inherit prototype from.
- */
-exports.inherits = require('inherits');
-
-exports._extend = function(origin, add) {
-  // Don't do anything if add isn't an object
-  if (!add || !isObject(add)) return origin;
-
-  var keys = Object.keys(add);
-  var i = keys.length;
-  while (i--) {
-    origin[keys[i]] = add[keys[i]];
-  }
-  return origin;
-};
-
-function hasOwnProperty(obj, prop) {
-  return Object.prototype.hasOwnProperty.call(obj, prop);
-}
-
-}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":7,"_process":11,"inherits":6}],9:[function(require,module,exports){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-function EventEmitter() {
-  this._events = this._events || {};
-  this._maxListeners = this._maxListeners || undefined;
-}
-module.exports = EventEmitter;
-
-// Backwards-compat with node 0.10.x
-EventEmitter.EventEmitter = EventEmitter;
-
-EventEmitter.prototype._events = undefined;
-EventEmitter.prototype._maxListeners = undefined;
-
-// By default EventEmitters will print a warning if more than 10 listeners are
-// added to it. This is a useful default which helps finding memory leaks.
-EventEmitter.defaultMaxListeners = 10;
-
-// Obviously not all Emitters should be limited to 10. This function allows
-// that to be increased. Set to zero for unlimited.
-EventEmitter.prototype.setMaxListeners = function(n) {
-  if (!isNumber(n) || n < 0 || isNaN(n))
-    throw TypeError('n must be a positive number');
-  this._maxListeners = n;
-  return this;
-};
-
-EventEmitter.prototype.emit = function(type) {
-  var er, handler, len, args, i, listeners;
-
-  if (!this._events)
-    this._events = {};
-
-  // If there is no 'error' event listener then throw.
-  if (type === 'error') {
-    if (!this._events.error ||
-        (isObject(this._events.error) && !this._events.error.length)) {
-      er = arguments[1];
-      if (er instanceof Error) {
-        throw er; // Unhandled 'error' event
-      }
-      throw TypeError('Uncaught, unspecified "error" event.');
-    }
-  }
-
-  handler = this._events[type];
-
-  if (isUndefined(handler))
-    return false;
-
-  if (isFunction(handler)) {
-    switch (arguments.length) {
-      // fast cases
-      case 1:
-        handler.call(this);
-        break;
-      case 2:
-        handler.call(this, arguments[1]);
-        break;
-      case 3:
-        handler.call(this, arguments[1], arguments[2]);
-        break;
-      // slower
-      default:
-        len = arguments.length;
-        args = new Array(len - 1);
-        for (i = 1; i < len; i++)
-          args[i - 1] = arguments[i];
-        handler.apply(this, args);
-    }
-  } else if (isObject(handler)) {
-    len = arguments.length;
-    args = new Array(len - 1);
-    for (i = 1; i < len; i++)
-      args[i - 1] = arguments[i];
-
-    listeners = handler.slice();
-    len = listeners.length;
-    for (i = 0; i < len; i++)
-      listeners[i].apply(this, args);
-  }
-
-  return true;
-};
-
-EventEmitter.prototype.addListener = function(type, listener) {
-  var m;
-
-  if (!isFunction(listener))
-    throw TypeError('listener must be a function');
-
-  if (!this._events)
-    this._events = {};
-
-  // To avoid recursion in the case that type === "newListener"! Before
-  // adding it to the listeners, first emit "newListener".
-  if (this._events.newListener)
-    this.emit('newListener', type,
-              isFunction(listener.listener) ?
-              listener.listener : listener);
-
-  if (!this._events[type])
-    // Optimize the case of one listener. Don't need the extra array object.
-    this._events[type] = listener;
-  else if (isObject(this._events[type]))
-    // If we've already got an array, just append.
-    this._events[type].push(listener);
-  else
-    // Adding the second element, need to change to array.
-    this._events[type] = [this._events[type], listener];
-
-  // Check for listener leak
-  if (isObject(this._events[type]) && !this._events[type].warned) {
-    var m;
-    if (!isUndefined(this._maxListeners)) {
-      m = this._maxListeners;
-    } else {
-      m = EventEmitter.defaultMaxListeners;
-    }
-
-    if (m && m > 0 && this._events[type].length > m) {
-      this._events[type].warned = true;
-      console.error('(node) warning: possible EventEmitter memory ' +
-                    'leak detected. %d listeners added. ' +
-                    'Use emitter.setMaxListeners() to increase limit.',
-                    this._events[type].length);
-      if (typeof console.trace === 'function') {
-        // not supported in IE 10
-        console.trace();
-      }
-    }
-  }
-
-  return this;
-};
-
-EventEmitter.prototype.on = EventEmitter.prototype.addListener;
-
-EventEmitter.prototype.once = function(type, listener) {
-  if (!isFunction(listener))
-    throw TypeError('listener must be a function');
-
-  var fired = false;
-
-  function g() {
-    this.removeListener(type, g);
-
-    if (!fired) {
-      fired = true;
-      listener.apply(this, arguments);
-    }
-  }
-
-  g.listener = listener;
-  this.on(type, g);
-
-  return this;
-};
-
-// emits a 'removeListener' event iff the listener was removed
-EventEmitter.prototype.removeListener = function(type, listener) {
-  var list, position, length, i;
-
-  if (!isFunction(listener))
-    throw TypeError('listener must be a function');
-
-  if (!this._events || !this._events[type])
-    return this;
-
-<<<<<<< HEAD
-function isNullOrUndefined(arg) {
-  return arg == null;
-}
-exports.isNullOrUndefined = isNullOrUndefined;
-
-function isNumber(arg) {
-  return typeof arg === 'number';
-}
-exports.isNumber = isNumber;
-
-function isString(arg) {
-  return typeof arg === 'string';
-}
-exports.isString = isString;
 
 function isSymbol(arg) {
   return typeof arg === 'symbol';
@@ -1463,120 +1146,9 @@ function now() {
 function EventEmitter() {
   this._events = this._events || {};
   this._maxListeners = this._maxListeners || undefined;
-=======
-  list = this._events[type];
-  length = list.length;
-  position = -1;
-
-  if (list === listener ||
-      (isFunction(list.listener) && list.listener === listener)) {
-    delete this._events[type];
-    if (this._events.removeListener)
-      this.emit('removeListener', type, listener);
-
-  } else if (isObject(list)) {
-    for (i = length; i-- > 0;) {
-      if (list[i] === listener ||
-          (list[i].listener && list[i].listener === listener)) {
-        position = i;
-        break;
-      }
-    }
-
-    if (position < 0)
-      return this;
-
-    if (list.length === 1) {
-      list.length = 0;
-      delete this._events[type];
-    } else {
-      list.splice(position, 1);
-    }
-
-    if (this._events.removeListener)
-      this.emit('removeListener', type, listener);
-  }
-
-  return this;
-};
-
-EventEmitter.prototype.removeAllListeners = function(type) {
-  var key, listeners;
-
-  if (!this._events)
-    return this;
-
-  // not listening for removeListener, no need to emit
-  if (!this._events.removeListener) {
-    if (arguments.length === 0)
-      this._events = {};
-    else if (this._events[type])
-      delete this._events[type];
-    return this;
-  }
-
-  // emit removeListener for all listeners on all events
-  if (arguments.length === 0) {
-    for (key in this._events) {
-      if (key === 'removeListener') continue;
-      this.removeAllListeners(key);
-    }
-    this.removeAllListeners('removeListener');
-    this._events = {};
-    return this;
-  }
-
-  listeners = this._events[type];
-
-  if (isFunction(listeners)) {
-    this.removeListener(type, listeners);
-  } else {
-    // LIFO order
-    while (listeners.length)
-      this.removeListener(type, listeners[listeners.length - 1]);
-  }
-  delete this._events[type];
-
-  return this;
-};
-
-EventEmitter.prototype.listeners = function(type) {
-  var ret;
-  if (!this._events || !this._events[type])
-    ret = [];
-  else if (isFunction(this._events[type]))
-    ret = [this._events[type]];
-  else
-    ret = this._events[type].slice();
-  return ret;
-};
-
-EventEmitter.listenerCount = function(emitter, type) {
-  var ret;
-  if (!emitter._events || !emitter._events[type])
-    ret = 0;
-  else if (isFunction(emitter._events[type]))
-    ret = 1;
-  else
-    ret = emitter._events[type].length;
-  return ret;
-};
-
-function isFunction(arg) {
-  return typeof arg === 'function';
-}
-
-function isNumber(arg) {
-  return typeof arg === 'number';
-}
-
-function isObject(arg) {
-  return typeof arg === 'object' && arg !== null;
->>>>>>> jshint-master
 }
 module.exports = EventEmitter;
 
-<<<<<<< HEAD
 // Backwards-compat with node 0.10.x
 EventEmitter.EventEmitter = EventEmitter;
 
@@ -1727,84 +1299,6 @@ EventEmitter.prototype.once = function(type, listener) {
 
   return this;
 };
-=======
-function isUndefined(arg) {
-  return arg === void 0;
-}
-
-},{}],10:[function(require,module,exports){
-arguments[4][6][0].apply(exports,arguments)
-},{"dup":6}],11:[function(require,module,exports){
-// shim for using process in browser
-
-var process = module.exports = {};
-var queue = [];
-var draining = false;
-
-function drainQueue() {
-    if (draining) {
-        return;
-    }
-    draining = true;
-    var currentQueue;
-    var len = queue.length;
-    while(len) {
-        currentQueue = queue;
-        queue = [];
-        var i = -1;
-        while (++i < len) {
-            currentQueue[i]();
-        }
-        len = queue.length;
-    }
-    draining = false;
-}
-process.nextTick = function (fun) {
-    queue.push(fun);
-    if (!draining) {
-        setTimeout(drainQueue, 0);
-    }
-};
-
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-// TODO(shtylman)
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-process.umask = function() { return 0; };
-
-},{}],12:[function(require,module,exports){
-arguments[4][7][0].apply(exports,arguments)
-},{"dup":7}],13:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"./support/isBuffer":12,"_process":11,"dup":8,"inherits":10}],14:[function(require,module,exports){
-(function (global){
-/*global window, global*/
-var util = require("util")
-var assert = require("assert")
-var now = require("date-now")
->>>>>>> jshint-master
 
 // emits a 'removeListener' event iff the listener was removed
 EventEmitter.prototype.removeListener = function(type, listener) {
@@ -1922,27 +1416,17 @@ function isNumber(arg) {
   return typeof arg === 'number';
 }
 
-<<<<<<< HEAD
 function isObject(arg) {
   return typeof arg === 'object' && arg !== null;
 }
-=======
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"assert":5,"date-now":15,"util":13}],15:[function(require,module,exports){
-module.exports = now
->>>>>>> jshint-master
 
 function isUndefined(arg) {
   return arg === void 0;
 }
 
-<<<<<<< HEAD
 },{}],12:[function(require,module,exports){
 arguments[4][6][0].apply(exports,arguments)
 },{"dup":6}],13:[function(require,module,exports){
-=======
-},{}],16:[function(require,module,exports){
->>>>>>> jshint-master
 (function (global){
 /**
  * @license
@@ -19053,7 +18537,6 @@ arguments[4][6][0].apply(exports,arguments)
 }.call(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-<<<<<<< HEAD
 },{}],14:[function(require,module,exports){
 // shim for using process in browser
 
@@ -19119,9 +18602,6 @@ arguments[4][7][0].apply(exports,arguments)
 },{"dup":7}],16:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
 },{"./support/isBuffer":15,"_process":14,"dup":8,"inherits":12}],17:[function(require,module,exports){
-=======
-},{}],17:[function(require,module,exports){
->>>>>>> jshint-master
 /*
  * Lexical analysis and token construction.
  */
@@ -20476,11 +19956,17 @@ Lexer.prototype = {
         sequence = char;
         next = this.peek(index + 1);
         while (reg.nonzeroDigit.test(next) || next === "0") {
+          /* istanbul ignore next */
           index += 1;
+          /* istanbul ignore next */
           char = next;
+          /* istanbul ignore next */
           sequence += char;
+          /* istanbul ignore next */
           body += char;
+          /* istanbul ignore next */
           value += char;
+          /* istanbul ignore next */
           next = this.peek(index + 1);
         }
         groupReferences.push(Number(sequence));
@@ -20577,6 +20063,7 @@ Lexer.prototype = {
       }
 
       if (next === "}") {
+        /* istanbul ignore next */
         return true;
       }
 
@@ -21298,11 +20785,7 @@ Lexer.prototype = {
 exports.Lexer = Lexer;
 exports.Context = Context;
 
-<<<<<<< HEAD
-},{"../data/ascii-identifier-data.js":1,"../data/es5-identifier-names.js":2,"../data/non-ascii-identifier-part-only.js":3,"../data/non-ascii-identifier-start.js":4,"./reg.js":21,"./state.js":23,"events":11,"lodash":13}],18:[function(require,module,exports){
-=======
-},{"../data/ascii-identifier-data.js":1,"../data/es5-identifier-names.js":2,"../data/non-ascii-identifier-part-only.js":3,"../data/non-ascii-identifier-start.js":4,"./reg.js":22,"./state.js":24,"events":9,"lodash":16}],18:[function(require,module,exports){
->>>>>>> jshint-master
+},{"../data/ascii-identifier-data.js":1,"../data/es5-identifier-names.js":2,"../data/non-ascii-identifier-part-only.js":3,"../data/non-ascii-identifier-start.js":4,"./reg.js":22,"./state.js":24,"events":11,"lodash":13}],18:[function(require,module,exports){
 "use strict";
 
 var _ = require("lodash");
@@ -21570,10 +21053,7 @@ _.each(info, function(desc, code) {
   exports.info[code] = { code: code, desc: desc };
 });
 
-<<<<<<< HEAD
 },{"lodash":13}],19:[function(require,module,exports){
-=======
-},{"lodash":16}],19:[function(require,module,exports){
 /**
  * The NameStack class is used to approximate function name inference as
  * introduced by ECMAScript 2015. In that edition, the `name` property of
@@ -21594,7 +21074,6 @@ _.each(info, function(desc, code) {
  * For more information on this behavior, see the following blog post:
  * https://bocoup.com/blog/whats-in-a-function-name
  */
->>>>>>> jshint-master
 "use strict";
 
 function NameStack() {
@@ -22829,11 +22308,7 @@ module.exports = {
   tryClause: 32
 };
 
-<<<<<<< HEAD
-},{}],21:[function(require,module,exports){
-=======
 },{}],22:[function(require,module,exports){
->>>>>>> jshint-master
 /*
  * Regular expressions. Some of these are stupidly long.
  */
@@ -22877,9 +22352,6 @@ exports.maxlenException = /^(?:(?:\/\/|\/\*|\*) ?)?[^ ]+$/;
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
 exports.whitespace = /[ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/;
 
-<<<<<<< HEAD
-},{}],22:[function(require,module,exports){
-=======
 exports.nonzeroDigit = /^[1-9]$/;
 
 exports.decimalDigit = /^[0-9]$/;
@@ -22894,7 +22366,6 @@ exports.regexpCharClasses = /[dDsSwW]/;
 exports.regexpDot = /(^|[^\\])(\\\\)*\./;
 
 },{}],23:[function(require,module,exports){
->>>>>>> jshint-master
 "use strict";
 
 var _      = require("lodash");
@@ -23048,6 +22519,7 @@ var scopeManager = function(state, predefined, exported, declared) {
     var params = _current["(params)"];
 
     if (!params) {
+      /* istanbul ignore next */
       return;
     }
 
@@ -23458,6 +22930,7 @@ var scopeManager = function(state, predefined, exported, declared) {
       var isMethod = state.funct["(method)"];
 
       if (!currentFunctParamScope["(params)"]) {
+        /* istanbul ignore next */
         return;
       }
 
@@ -23581,6 +23054,7 @@ var scopeManager = function(state, predefined, exported, declared) {
               return;
             }
           } else {
+            /* istanbul ignore next */
             break;
           }
         }
@@ -23936,11 +23410,7 @@ var scopeManager = function(state, predefined, exported, declared) {
 
 module.exports = scopeManager;
 
-<<<<<<< HEAD
-},{"events":11,"lodash":13}],23:[function(require,module,exports){
-=======
-},{"events":9,"lodash":16}],24:[function(require,module,exports){
->>>>>>> jshint-master
+},{"events":11,"lodash":13}],24:[function(require,module,exports){
 "use strict";
 var NameStack = require("./name-stack.js");
 
@@ -24009,7 +23479,7 @@ var state = {
   },
 
   /**
-   * Determine if constructs introduced in ECMAScript 8 should be accepted.
+   * Determine if constructs introduced in ECMAScript 9 should be accepted.
    *
    * @returns {boolean}
    */
@@ -24125,11 +23595,7 @@ var state = {
 
 exports.state = state;
 
-<<<<<<< HEAD
-},{"./name-stack.js":19}],24:[function(require,module,exports){
-=======
 },{"./name-stack.js":19}],25:[function(require,module,exports){
->>>>>>> jshint-master
 "use strict";
 
 exports.register = function(linter) {
@@ -24275,11 +23741,7 @@ exports.register = function(linter) {
   });
 };
 
-<<<<<<< HEAD
-},{}],25:[function(require,module,exports){
-=======
 },{}],26:[function(require,module,exports){
->>>>>>> jshint-master
 // jshint -W001
 
 "use strict";
@@ -25833,6 +25295,7 @@ var JSHINT = (function() {
               state.option[tn] = !state.option[tn];
             }
           } else if (directiveToken.type === "jshint.unstable") {
+            /* istanbul ignore next */
             state.option.unstable[key] = (val === "true");
           } else {
             state.option[key] = (val === "true");
@@ -25920,24 +25383,6 @@ var JSHINT = (function() {
    */
   function advance(expected, relatedToken) {
     var nextToken = state.tokens.next;
-
-    switch (state.tokens.curr.id) {
-    case "(number)":
-      if (nextToken.id === ".") {
-        warning("W005", state.tokens.curr);
-      }
-      break;
-    case "-":
-      if (nextToken.id === "-" || nextToken.id === "--") {
-        warning("W006");
-      }
-      break;
-    case "+":
-      if (nextToken.id === "+" || nextToken.id === "++") {
-        warning("W007");
-      }
-      break;
-    }
 
     if (expected && nextToken.id !== expected) {
       if (relatedToken) {
@@ -26354,7 +25799,7 @@ var JSHINT = (function() {
 
   /**
    * Convenience function for defining JSHint symbols for reserved
-   * keywords--those that are restricted from use as bindings (and as propery
+   * keywords--those that are restricted from use as bindings (and as property
    * names in ECMAScript 3 environments).
    *
    * @param {string} s - the name of the symbol
@@ -26389,7 +25834,7 @@ var JSHINT = (function() {
    *                     support cases where further refinement is necessary)
    */
   function FutureReservedWord(name, meta) {
-    var x = type(name, (meta && meta.nud) || state.syntax["(identifier)"].nud);
+    var x = type(name, state.syntax["(identifier)"].nud);
 
     meta = meta || {};
     meta.isFutureReservedWord = true;
@@ -26400,26 +25845,6 @@ var JSHINT = (function() {
     x.meta = meta;
 
     return x;
-  }
-
-  /**
-   * Convenience function for defining JSHint symbols for reserved
-   * binding identifiers.
-   *
-   * @param {string} s - the name of the symbol
-   * @param {function} v - the first null denotation function for the symbol;
-   *                       see the `expression` function for more detail
-   *
-   * @returns {object} - the object describing the JSHint symbol (provided to
-   *                     support cases where further refinement is necessary)
-   */
-  function reservevar(s, v) {
-    return reserve(s, function() {
-      if (typeof v === "function") {
-        v(this);
-      }
-      return this;
-    });
   }
 
   /**
@@ -26675,9 +26100,6 @@ var JSHINT = (function() {
       if (nativeObject)
         warning("W121", left, nativeObject);
     }
-    if (checkPunctuator(left, "...")) {
-      left = left.right;
-    }
 
     if (left.identifier && !left.isMetaProperty) {
       // The `reassign` method also calls `modify`, but we are specific in
@@ -26860,10 +26282,6 @@ var JSHINT = (function() {
       }
     }
 
-    if (val === "undefined") {
-      return val;
-    }
-
     warning("W024", state.tokens.curr, state.tokens.curr.id);
     return val;
   }
@@ -26919,7 +26337,7 @@ var JSHINT = (function() {
     // The token should be consumed after a warning is issued so the parser
     // can continue as though an identifier were found. The semicolon token
     // should not be consumed in this way so that the parser interprets it as
-    // a statement delimeter;
+    // a statement delimiter;
     if (state.tokens.next.id !== ";") {
       advance();
     }
@@ -27345,6 +26763,10 @@ var JSHINT = (function() {
   // Build the syntax table by declaring the syntactic elements of the language.
 
   type("(number)", function() {
+    if (state.tokens.next.id === ".") {
+      warning("W005", this);
+    }
+
     return this;
   });
 
@@ -27381,6 +26803,7 @@ var JSHINT = (function() {
     },
 
     led: function() {
+      /* istanbul ignore next */
       error("E033", state.tokens.next, state.tokens.next.value);
     }
   };
@@ -27447,16 +26870,20 @@ var JSHINT = (function() {
   reserve("finally");
   reserve("true", function() { return this; });
   reserve("false", function() { return this; });
-  reservevar("null");
-  reservevar("this", function(x) {
+  reserve("null", function() { return this; });
+  reserve("this", function() {
     if (state.isStrict() && !isMethod() &&
         !state.option.validthis && ((state.funct["(statement)"] &&
         state.funct["(name)"].charAt(0) > "Z") || state.funct["(global)"])) {
-      warning("W040", x);
+      warning("W040", this);
     }
+
+    return this;
   });
-  reservevar("super", function(x) {
-    superNud.call(state.tokens.curr, x);
+  reserve("super", function() {
+    superNud.call(state.tokens.curr, this);
+
+    return this;
   });
 
   assignop("=", "assign", 20);
@@ -27464,6 +26891,7 @@ var JSHINT = (function() {
   assignop("-=", "assignsub", 20);
   assignop("*=", "assignmult", 20);
   assignop("/=", "assigndiv", 20).nud = function() {
+    /* istanbul ignore next */
     error("E014");
   };
   assignop("%=", "assignmod", 20);
@@ -27500,6 +26928,7 @@ var JSHINT = (function() {
     }
     while (true) {
       if (!(expr = expression(context, 10))) {
+        /* istanbul ignore next */
         break;
       }
       that.exprs.push(expr);
@@ -27559,6 +26988,7 @@ var JSHINT = (function() {
         this.from = this.character;
         warning("W116", this, "===", "==");
         break;
+      /* istanbul ignore next */
       case isTypoTypeof(right, left, state):
         warning("W122", this, right.value);
         break;
@@ -27573,6 +27003,7 @@ var JSHINT = (function() {
     if (isTypoTypeof(right, left, state)) {
       warning("W122", this, right.value);
     } else if (isTypoTypeof(left, right, state)) {
+      /* istanbul ignore next */
       warning("W122", this, left.value);
     }
     return this;
@@ -27585,6 +27016,7 @@ var JSHINT = (function() {
       this.from = this.character;
       warning("W116", this, "!==", "!=");
     } else if (isTypoTypeof(right, left, state)) {
+      /* istanbul ignore next */
       warning("W122", this, right.value);
     } else if (isTypoTypeof(left, right, state)) {
       warning("W122", this, left.value);
@@ -27595,6 +27027,7 @@ var JSHINT = (function() {
     if (isTypoTypeof(right, left, state)) {
       warning("W122", this, right.value);
     } else if (isTypoTypeof(left, right, state)) {
+      /* istanbul ignore next */
       warning("W122", this, left.value);
     }
     return this;
@@ -27638,6 +27071,7 @@ var JSHINT = (function() {
     return token;
   }, 120);
   infix("+", function(context, left, that) {
+    var next = state.tokens.next;
     var right;
     that.left = left;
     that.right = right = expression(context, 130);
@@ -27651,11 +27085,45 @@ var JSHINT = (function() {
       return left;
     }
 
+    if (next.id === "+" || next.id === "++") {
+      warning("W007", that.right);
+    }
+
     return that;
   }, 130);
-  prefix("+", "num");
-  infix("-", "sub", 130);
-  prefix("-", "neg");
+  prefix("+", function(context) {
+    var next = state.tokens.next;
+    this.arity = "unary";
+    this.right = expression(context, 150);
+
+    if (next.id === "+" || next.id === "++") {
+      warning("W007", this.right);
+    }
+
+    return this;
+  });
+  infix("-", function(context, left, that) {
+    var next = state.tokens.next;
+    that.left = left;
+    that.right = expression(context, 130);
+
+    if (next.id === "-" || next.id === "--") {
+      warning("W006", that.right);
+    }
+
+    return that;
+  }, 130);
+  prefix("-", function(context) {
+    var next = state.tokens.next;
+    this.arity = "unary";
+    this.right = expression(context, 150);
+
+    if (next.id === "-" || next.id === "--") {
+      warning("W006", this.right);
+    }
+
+    return this;
+  });
   infix("*", "mult", 140);
   infix("/", "div", 140);
   infix("%", "mod", 140);
@@ -27706,10 +27174,12 @@ var JSHINT = (function() {
     this.right = expression(context, 150);
 
     if (!this.right) { // '!' followed by nothing? Give up.
+      /* istanbul ignore next */
       quit("E041", this);
     }
 
     if (bang[this.right.id] === true) {
+      /* istanbul ignore next */
       warning("W018", this, "!");
     }
     return this;
@@ -27774,16 +27244,15 @@ var JSHINT = (function() {
         case "this":
           break;
         default:
-          if (c.id !== "function") {
-            i = c.value.substr(0, 1);
-            if (state.option.newcap && (i < "A" || i > "Z") &&
-              !state.funct["(scope)"].isPredefined(c.value)) {
-              warning("W055", state.tokens.curr);
-            }
+          i = c.value.substr(0, 1);
+          if (state.option.newcap && (i < "A" || i > "Z") &&
+            !state.funct["(scope)"].isPredefined(c.value)) {
+            warning("W055", state.tokens.curr);
           }
         }
       } else {
         if (c.id !== "." && c.id !== "[" && c.id !== "(") {
+          /* istanbul ignore next */
           warning("W056", state.tokens.curr);
         }
       }
@@ -27887,6 +27356,7 @@ var JSHINT = (function() {
     var props = Object.create(null);
     var name, accessorType, token, isStatic, inGenerator, hasConstructor;
 
+    /* istanbul ignore else */
     if (state.tokens.next.value === "{") {
       advance("{");
     } else {
@@ -27932,6 +27402,25 @@ var JSHINT = (function() {
       }
 
       token = state.tokens.next;
+
+      if ((token.value === "set" || token.value === "get") && !checkPunctuator(peek(), "(")) {
+        if (inGenerator) {
+          /* istanbul ignore next */
+          error("E024", token, token.value);
+        }
+        accessorType = token.value;
+        advance();
+        token = state.tokens.next;
+
+        if (!isStatic && token.value === "constructor") {
+          error("E049", token, "class " + accessorType + "ter method", token.value);
+        } else if (isStatic && token.value === "prototype") {
+          error("E049", token, "static class " + accessorType + "ter method", token.value);
+        }
+      } else {
+        accessorType = null;
+      }
+
       switch (token.value) {
         case ";":
           warning("W032", token);
@@ -27946,35 +27435,15 @@ var JSHINT = (function() {
           } else {
             if (inGenerator || context & prodParams.preAsync) {
               error("E024", token, token.value);
-            }
-            if (hasConstructor) {
+            } else if (hasConstructor) {
+              /* istanbul ignore next */
               error("E024", token, token.value);
+            } else {
+              hasConstructor = !accessorType && !isStatic;
             }
             advance();
             doMethod(classToken, context, state.nameStack.infer());
-            hasConstructor = true;
           }
-          break;
-        case "set":
-        case "get":
-          if (inGenerator) {
-            error("E024", token, token.value);
-          }
-          accessorType = token.value;
-          advance();
-
-          if (state.tokens.next.value === "[") {
-            name = computedPropertyName(context);
-            doMethod(classToken, context, name, false);
-          } else {
-            name = propertyName(context);
-            if (name === "prototype" || name === "constructor") {
-              error("E049", state.tokens.curr, "class " + accessorType + "ter method", name);
-            }
-            saveAccessor(accessorType, props, name, state.tokens.curr, true, isStatic);
-            doMethod(classToken, context, state.nameStack.infer(), false);
-          }
-
           break;
         case "[":
           name = computedPropertyName(context);
@@ -27983,15 +27452,23 @@ var JSHINT = (function() {
           break;
         default:
           name = propertyName(context);
-          if (!name) {
+          if (name === undefined) {
             error("E024", token, token.value);
             advance();
             break;
           }
-          if (name === "prototype") {
-            error("E049", token, "class method", name);
+
+          if (accessorType) {
+            saveAccessor(accessorType, props, name, token, true, isStatic);
+            name = state.nameStack.infer();
+          } else {
+            if (isStatic && name === "prototype") {
+              error("E049", token, "static class method", name);
+            }
+
+            saveProperty(props, name, token, true, isStatic);
           }
-          saveProperty(props, name, token, true, isStatic);
+
           doMethod(classToken, context, name, inGenerator);
           break;
       }
@@ -28022,6 +27499,7 @@ var JSHINT = (function() {
           identifier(context);
           advance();
         }
+        /* istanbul ignore next */
         return;
       } else {
         while (state.tokens.next.value !== "(") {
@@ -28089,6 +27567,7 @@ var JSHINT = (function() {
         if (left.value.match(/^[A-Z]([A-Z0-9_$]*[a-z][A-Za-z0-9_$]*)?$/)) {
           if ("Array Number String Boolean Date Object Error Symbol".indexOf(left.value) === -1) {
             if (left.value === "Math") {
+              /* istanbul ignore next */
               warning("W063", left);
             } else if (state.option.newcap) {
               warning("W064", left);
@@ -28375,6 +27854,7 @@ var JSHINT = (function() {
     if (_.includes(["in", "of"], state.tokens.next.value)) {
       advance();
     } else {
+      /* istanbul ignore next */
       error("E045", state.tokens.curr);
     }
     state.funct["(comparray)"].setState("generate");
@@ -28418,6 +27898,7 @@ var JSHINT = (function() {
     if (b) {
       indent += state.option.indent;
       if (state.tokens.next.from === indent + state.option.indent) {
+        /* istanbul ignore next */
         indent += state.option.indent;
       }
     }
@@ -28475,6 +27956,7 @@ var JSHINT = (function() {
     var id;
     var preserve = true;
     if (typeof preserveOrToken === "object") {
+      /* istanbul ignore next */
       id = preserveOrToken;
     } else {
       preserve = preserveOrToken;
@@ -28493,6 +27975,7 @@ var JSHINT = (function() {
           advance();
         }
       }
+    /* istanbul ignore next */
     } else if (typeof id === "object") {
       if (id.id === "(string)" || id.id === "(identifier)") id = id.value;
       else if (id.id === "(number)") id = id.value.toString();
@@ -28720,7 +28203,10 @@ var JSHINT = (function() {
 
     function end() {
       if (state.tokens.curr.template && state.tokens.curr.tail &&
-          state.tokens.curr.context === ctx) return true;
+          state.tokens.curr.context === ctx) {
+        /* istanbul ignore next */
+        return true;
+      }
       var complete = (state.tokens.next.template && state.tokens.next.tail &&
                       state.tokens.next.context === ctx);
       if (complete) advance();
@@ -28987,6 +28473,7 @@ var JSHINT = (function() {
       if (b) {
         indent += state.option.indent;
         if (state.tokens.next.from === indent + state.option.indent) {
+          /* istanbul ignore next */
           indent += state.option.indent;
         }
       }
@@ -29119,6 +28606,7 @@ var JSHINT = (function() {
         if (state.tokens.next.id === ",") {
           parseComma({ allowTrailing: true, property: true });
           if (state.tokens.next.id === ",") {
+            /* istanbul ignore next */
             warning("W070", state.tokens.curr);
           } else if (state.tokens.next.id === "}" && !state.inES5()) {
             warning("W070", state.tokens.curr);
@@ -29141,6 +28629,7 @@ var JSHINT = (function() {
       return this;
     };
     x.fud = function() {
+      /* istanbul ignore next */
       error("E036", state.tokens.curr);
     };
   }(delim("{")));
@@ -29224,12 +28713,13 @@ var JSHINT = (function() {
 
           // Due to visual symmetry with the array rest property (and the early
           // design of the language feature), developers may mistakenly assume
-          // any expression is valid in this position.  Parse an expression and
-          // issue an error in order to recover more gracefully from this
-          // condition.
-          expr = expression(context, 10);
-
-          if (expr.type !== "(identifier)") {
+          // any expression is valid in this position. If the next token is not
+          // an identifier, attempt to parse an expression and issue an error.
+          // order to recover more gracefully from this condition.
+          if (state.tokens.next.type === "(identifier)") {
+            id = identifier(context);
+          } else {
+            expr = expression(context, 10);
             error("E030", expr, expr.value);
           }
         } else {
@@ -29274,6 +28764,7 @@ var JSHINT = (function() {
         }
         if (!isRest && checkPunctuator(state.tokens.next, "=")) {
           if (checkPunctuator(state.tokens.prev, "...")) {
+            /* istanbul ignore next */
             advance("]");
           } else {
             advance("=");
@@ -29334,6 +28825,7 @@ var JSHINT = (function() {
       if (token && value)
         token.first = value;
       else if (token && token.first && !value)
+        /* istanbul ignore next */
         warning("W080", token.first, token.first.value);
     });
   }
@@ -29387,6 +28879,7 @@ var JSHINT = (function() {
           // It is a Syntax Error if the BoundNames of BindingList contains
           // "let".
           if (t.id === "let") {
+            /* istanbul ignore next */
             warning("W024", t.token, t.id);
           }
 
@@ -29685,6 +29178,7 @@ var JSHINT = (function() {
     }
 
     if (state.tokens.next.id === "(" && state.tokens.next.line === state.tokens.curr.line) {
+      /* istanbul ignore next */
       error("E039");
     }
     return this;
@@ -29957,6 +29451,7 @@ var JSHINT = (function() {
         state.funct["(breakage)"] -= 1;
         state.funct["(verb)"] = undefined;
         return;
+      /* istanbul ignore next */
       case "(end)":
         error("E023", state.tokens.next, "}");
         return;
@@ -29964,6 +29459,7 @@ var JSHINT = (function() {
         indent += state.option.indent;
         if (g) {
           switch (state.tokens.curr.id) {
+          /* istanbul ignore next */
           case ",":
             error("E040");
             return;
@@ -29971,11 +29467,13 @@ var JSHINT = (function() {
             g = false;
             statements(context);
             break;
+          /* istanbul ignore next */
           default:
             error("E025", state.tokens.curr);
             return;
           }
         } else {
+          /* istanbul ignore else */
           if (state.tokens.curr.id === ":") {
             advance(":");
             error("E024", state.tokens.curr, ":");
@@ -30602,7 +30100,9 @@ var JSHINT = (function() {
           advance("}");
           break;
         } else {
+          /* istanbul ignore next */
           error("E024", state.tokens.next, state.tokens.next.value);
+          /* istanbul ignore next */
           break;
         }
       }
@@ -30688,6 +30188,7 @@ var JSHINT = (function() {
       var exportedTokens = [];
       while (!checkPunctuator(state.tokens.next, "}")) {
         if (!state.tokens.next.identifier) {
+          /* istanbul ignore next */
           error("E030", state.tokens.next, state.tokens.next.value);
         }
         advance();
@@ -30697,6 +30198,7 @@ var JSHINT = (function() {
         if (state.tokens.next.value === "as") {
           advance("as");
           if (!state.tokens.next.identifier) {
+            /* istanbul ignore next */
             error("E030", state.tokens.next, state.tokens.next.value);
           }
           advance();
@@ -30756,6 +30258,7 @@ var JSHINT = (function() {
       advance("class");
       state.syntax["class"].fud(context);
     } else {
+      /* istanbul ignore next */
       error("E024", state.tokens.next, state.tokens.next.value);
     }
 
@@ -31035,6 +30538,7 @@ var JSHINT = (function() {
     var block = lookupBlockType();
     if (block.notJson) {
       if (!state.inES6() && block.isDestAssign) {
+        /* istanbul ignore next */
         warning("W104", state.tokens.curr, "destructuring assignment", "6");
       }
       statements(context);
@@ -31141,10 +30645,12 @@ var JSHINT = (function() {
             // we check whether current variable has been declared
             if (use(v)) {
               // if not we warn about it
+              /* istanbul ignore next */
               state.funct["(scope)"].block.use(v, state.tokens.curr);
             }
             return true;
           }
+          /* istanbul ignore next */
           return false;
         }
         };
@@ -31354,6 +30860,7 @@ var JSHINT = (function() {
     });
 
     scopeManagerInst.on("error", function(ev) {
+      /* istanbul ignore next */
       error.apply(null, [ ev.code, ev.token ].concat(ev.data));
     });
 
@@ -31378,6 +30885,7 @@ var JSHINT = (function() {
 
     api = {
       get isJSON() {
+        /* istanbul ignore next */
         return state.jsonMode;
       },
 
@@ -31413,6 +30921,7 @@ var JSHINT = (function() {
     if (o && o.ignoreDelimiters) {
 
       if (!Array.isArray(o.ignoreDelimiters)) {
+        /* istanbul ignore next */
         o.ignoreDelimiters = [o.ignoreDelimiters];
       }
 
@@ -31518,6 +31027,7 @@ var JSHINT = (function() {
           character : err.character || nt.from
         });
       } else {
+        /* istanbul ignore next */
         throw err;
       }
     }
@@ -31551,6 +31061,7 @@ var JSHINT = (function() {
     }
 
     if (state.jsonMode) {
+      /* istanbul ignore next */
       data.json = true;
     }
 
@@ -31560,6 +31071,7 @@ var JSHINT = (function() {
     }
 
     if (urls.length > 0) {
+      /* istanbul ignore next */
       data.urls = urls;
     }
 
@@ -31613,11 +31125,7 @@ if (typeof exports === "object" && exports) {
   exports.JSHINT = JSHINT;
 }
 
-<<<<<<< HEAD
-},{"./lex.js":17,"./messages.js":18,"./options.js":20,"./reg.js":21,"./scope-manager.js":22,"./state.js":23,"./style.js":24,"./vars.js":25,"console-browserify":9,"events":11,"lodash":13}]},{},[]);
-=======
-},{"./lex.js":17,"./messages.js":18,"./options.js":20,"./prod-params.js":21,"./reg.js":22,"./scope-manager.js":23,"./state.js":24,"./style.js":25,"./vars.js":26,"console-browserify":14,"events":9,"lodash":16}]},{},[]);
->>>>>>> jshint-master
+},{"./lex.js":17,"./messages.js":18,"./options.js":20,"./prod-params.js":21,"./reg.js":22,"./scope-manager.js":23,"./state.js":24,"./style.js":25,"./vars.js":26,"console-browserify":9,"events":11,"lodash":13}]},{},[]);
 
 JSHINT = require('jshint').JSHINT;
 if (typeof exports === 'object' && exports) exports.JSHINT = JSHINT;
