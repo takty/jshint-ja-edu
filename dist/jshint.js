@@ -1,4 +1,4 @@
-/*! 2.10.2 */
+/*! 2.11.0 */
 var JSHINT;
 if (typeof window === 'undefined') window = {};
 (function () {
@@ -19472,8 +19472,27 @@ Lexer.prototype = {
         index += 1;
       }
 
-      if (isAllowedDigit !== isDecimalDigit) {
-        if (!isLegacy && value.length <= 2) { // 0x
+      var isBigInt = this.peek(index) === 'n';
+
+      if (isAllowedDigit !== isDecimalDigit || isBigInt) {
+        if (isBigInt) {
+          if (!state.option.unstable.bigint) {
+            this.triggerAsync(
+              "warning",
+              {
+                code: "W144",
+                line: this.line,
+                character: this.char,
+                data: [ "BigInt", "bigint" ]
+              },
+              checks,
+              function() { return true; }
+            );
+          }
+
+          value += char;
+          index += 1;
+        } else if (!isLegacy && value.length <= 2) { // 0x
           return {
             type: Token.NumericLiteral,
             value: value,
@@ -20035,6 +20054,18 @@ Lexer.prototype = {
           checks,
           function() { return true; }
         );
+      } else if (char === "0" && reg.decimalDigit.test(this.peek(index + 1))) {
+        this.triggerAsync(
+          "error",
+          {
+            code: "E016",
+            line: this.line,
+            character: this.char,
+            data: [ "Invalid decimal escape sequence" ]
+          },
+          checks,
+          hasUFlag
+        );
       }
 
       index += 1;
@@ -20311,6 +20342,8 @@ Lexer.prototype = {
           return !escapedChars.split("").every(function(escapedChar) {
               return escapedChar === "u" ||
                 escapedChar === "/" ||
+                escapedChar === "0" ||
+                reg.regexpControlEscapes.test(escapedChar) ||
                 reg.regexpCharClasses.test(escapedChar) ||
                 reg.regexpSyntaxChars.test(escapedChar);
             });
@@ -22200,6 +22233,9 @@ exports.val = {
    *    9](https://www.ecma-international.org/ecma-262/9.0/index.html). Notable
    *    additions: asynchronous iteration, rest/spread properties, and various
    *    RegExp extensions
+   *  - `10` - To enable language features introduced by ECMAScript
+   *    10](https://www.ecma-international.org/ecma-262/10.0/index.html).
+   *    Notable additions: optional catch bindings.
    */
   esversion: 5
 };
@@ -22211,6 +22247,17 @@ exports.val = {
  * right to remove or modify them between major version releases.
  */
 exports.unstable = {
+  /**
+   * [The BigInt proposal](https://github.com/tc39/proposal-bigint) extends the
+   * language's grammer for numeric literals to support integer values of
+   * arbitrary precision. It also introduces a new value of the `typeof`
+   * operator, "bigint".
+   *
+   * Mathematical operations which use both BigInt and traditional ECMAScript
+   * Number values may not have the intended effect. Due to the weakly-typed
+   * nature of the language, JSHint is unable to identify such cases.
+   */
+  bigint: true
 };
 
 // These are JSHint boolean options which are shared with JSLint
@@ -22305,7 +22352,12 @@ module.exports = {
    * Enabled when any exception thrown by the expression will be caught by a
    * TryStatement.
    */
-  tryClause: 32
+  tryClause: 32,
+
+  /**
+   * Enabled when parsing the body of a generator function.
+   */
+  yield: 64
 };
 
 },{}],22:[function(require,module,exports){
@@ -22360,6 +22412,8 @@ exports.regexpSyntaxChars = /[\^$\\.*+?()[\]{}|]/;
 
 exports.regexpQuantifiers = /[*+?{]/;
 
+exports.regexpControlEscapes = /[fnrtv]/;
+
 exports.regexpCharClasses = /[dDsSwW]/;
 
 // Identifies the "dot" atom in regular expressions
@@ -22378,22 +22432,16 @@ var marker = {};
 
 /**
  * A factory function for creating scope managers. A scope manager tracks
- * variables and JSHint "labels", detecting when variables are referenced
- * (through "usages").
- *
- * Note that in this context, the term "label" describes an implementation
- * detail of JSHint and is not related to the ECMAScript language construct of
- * the same name. Where possible, the former is referred to as a "JSHint label"
- * to avoid confusion.
+ * bindings, detecting when variables are referenced (through "usages").
  *
  * @param {object} state - the global state object (see `state.js`)
- * @param {Array} predefined - a set of JSHint label names for built-in
- *                             bindings provided by the environment
- * @param {object} exported - a hash for JSHint label names that are intended
- *                            to be referenced in contexts beyond the current
- *                            program code
- * @param {object} declared - a hash for JSHint label names that were defined
- *                            as global bindings via linting configuration
+ * @param {Array} predefined - a set of binding names for built-in bindings
+ *                             provided by the environment
+ * @param {object} exported - a hash for binding names that are intended to be
+ *                            referenced in contexts beyond the current program
+ *                            code
+ * @param {object} declared - a hash for binding names that were defined as
+ *                            global bindings via linting configuration
  *
  * @returns {object} - a scope manager
  */
@@ -22404,9 +22452,9 @@ var scopeManager = function(state, predefined, exported, declared) {
 
   function _newScope(type) {
     _current = {
-      "(labels)": Object.create(null),
+      "(bindings)": Object.create(null),
       "(usages)": Object.create(null),
-      "(breakLabels)": Object.create(null),
+      "(labels)": Object.create(null),
       "(parent)": _current,
       "(type)": type,
       "(params)": (type === "functionparams" || type === "catchparams") ? [] : null
@@ -22440,9 +22488,9 @@ var scopeManager = function(state, predefined, exported, declared) {
     });
   }
 
-  function _setupUsages(labelName) {
-    if (!_current["(usages)"][labelName]) {
-      _current["(usages)"][labelName] = {
+  function _setupUsages(bindingName) {
+    if (!_current["(usages)"][bindingName]) {
+      _current["(usages)"][bindingName] = {
         "(modified)": [],
         "(reassigned)": [],
         "(tokens)": []
@@ -22501,11 +22549,11 @@ var scopeManager = function(state, predefined, exported, declared) {
       _checkParams();
       return;
     }
-    var curentLabels = _current["(labels)"];
-    for (var labelName in curentLabels) {
-      if (curentLabels[labelName]["(type)"] !== "exception" &&
-        curentLabels[labelName]["(unused)"]) {
-        _warnUnused(labelName, curentLabels[labelName]["(token)"], "var");
+    var currentBindings = _current["(bindings)"];
+    for (var bindingName in currentBindings) {
+      if (currentBindings[bindingName]["(type)"] !== "exception" &&
+        currentBindings[bindingName]["(unused)"]) {
+        _warnUnused(bindingName, currentBindings[bindingName]["(token)"], "var");
       }
     }
   }
@@ -22527,7 +22575,7 @@ var scopeManager = function(state, predefined, exported, declared) {
     var unused_opt;
 
     while (param) {
-      var label = _current["(labels)"][param];
+      var binding = _current["(bindings)"][param];
 
       unused_opt = _getUnusedOption(state.funct["(unusedOption)"]);
 
@@ -22540,8 +22588,8 @@ var scopeManager = function(state, predefined, exported, declared) {
       if (param === "undefined")
         return;
 
-      if (label["(unused)"]) {
-        _warnUnused(param, label["(token)"], "param", state.funct["(unusedOption)"]);
+      if (binding["(unused)"]) {
+        _warnUnused(param, binding["(token)"], "param", state.funct["(unusedOption)"]);
       } else if (unused_opt === "last-param") {
         return;
       }
@@ -22551,36 +22599,36 @@ var scopeManager = function(state, predefined, exported, declared) {
   }
 
   /**
-   * Find the relevant JSHint label's scope. The owning scope is located by
-   * first inspecting the current scope and then moving "downward" through the
-   * stack of scopes.
+   * Find the relevant binding's scope. The owning scope is located by first
+   * inspecting the current scope and then moving "downward" through the stack
+   * of scopes.
    *
-   * @param {string} labelName - the value of the identifier
+   * @param {string} bindingName - the value of the identifier
    *
-   * @returns {Object} - the scope in which the JSHint label was found
+   * @returns {Object} - the scope in which the binding was found
    */
-  function _getLabel(labelName) {
+  function _getBinding(bindingName) {
     for (var i = _scopeStack.length - 1 ; i >= 0; --i) {
-      var scopeLabels = _scopeStack[i]["(labels)"];
-      if (scopeLabels[labelName]) {
-        return scopeLabels;
+      var scopeBindings = _scopeStack[i]["(bindings)"];
+      if (scopeBindings[bindingName]) {
+        return scopeBindings;
       }
     }
   }
 
   /**
-   * Determine if a given JSHint label name has been referenced within the
-   * current function or any function defined within.
+   * Determine if a given binding name has been referenced within the current
+   * function or any function defined within.
    *
-   * @param {string} labelName - the value of the identifier
+   * @param {string} bindingName - the value of the identifier
    *
    * @returns {boolean}
    */
-  function usedSoFarInCurrentFunction(labelName) {
+  function usedSoFarInCurrentFunction(bindingName) {
     for (var i = _scopeStack.length - 1; i >= 0; i--) {
       var current = _scopeStack[i];
-      if (current["(usages)"][labelName]) {
-        return current["(usages)"][labelName];
+      if (current["(usages)"][bindingName]) {
+        return current["(usages)"][bindingName];
       }
       if (current === _currentFunctBody) {
         break;
@@ -22589,7 +22637,7 @@ var scopeManager = function(state, predefined, exported, declared) {
     return false;
   }
 
-  function _checkOuterShadow(labelName, token) {
+  function _checkOuterShadow(bindingName, token) {
 
     // only check if shadow is outer
     if (state.option.shadow !== "outer") {
@@ -22606,16 +22654,16 @@ var scopeManager = function(state, predefined, exported, declared) {
       if (!isNewFunction && _scopeStack[i + 1] === _currentFunctBody) {
         outsideCurrentFunction = false;
       }
-      if (outsideCurrentFunction && stackItem["(labels)"][labelName]) {
-        warning("W123", token, labelName);
+      if (outsideCurrentFunction && stackItem["(bindings)"][bindingName]) {
+        warning("W123", token, bindingName);
       }
-      if (stackItem["(breakLabels)"][labelName]) {
-        warning("W123", token, labelName);
+      if (stackItem["(labels)"][bindingName]) {
+        warning("W123", token, bindingName);
       }
     }
   }
 
-  function _latedefWarning(type, labelName, token) {
+  function _latedefWarning(type, bindingName, token) {
     var isFunction;
 
     if (state.option.latedef) {
@@ -22625,7 +22673,7 @@ var scopeManager = function(state, predefined, exported, declared) {
       // if either latedef is strict and this is a function
       //    or this is not a function
       if ((state.option.latedef === true && isFunction) || !isFunction) {
-        warning("W003", token, labelName);
+        warning("W003", token, bindingName);
       }
     }
   }
@@ -22638,8 +22686,8 @@ var scopeManager = function(state, predefined, exported, declared) {
       });
     },
 
-    isPredefined: function(labelName) {
-      return !this.has(labelName) && _.has(_scopeStack[0]["(predefined)"], labelName);
+    isPredefined: function(bindingName) {
+      return !this.has(bindingName) && _.has(_scopeStack[0]["(predefined)"], bindingName);
     },
 
     /**
@@ -22675,52 +22723,52 @@ var scopeManager = function(state, predefined, exported, declared) {
 
       var i, j, isImmutable, isFunction;
       var currentUsages = _current["(usages)"];
-      var currentLabels = _current["(labels)"];
-      var usedLabelNameList = Object.keys(currentUsages);
+      var currentBindings = _current["(bindings)"];
+      var usedBindingNameList = Object.keys(currentUsages);
 
       /* istanbul ignore if */
-      if (currentUsages.__proto__ && usedLabelNameList.indexOf("__proto__") === -1) {
-        usedLabelNameList.push("__proto__");
+      if (currentUsages.__proto__ && usedBindingNameList.indexOf("__proto__") === -1) {
+        usedBindingNameList.push("__proto__");
       }
 
-      for (i = 0; i < usedLabelNameList.length; i++) {
-        var usedLabelName = usedLabelNameList[i];
+      for (i = 0; i < usedBindingNameList.length; i++) {
+        var usedBindingName = usedBindingNameList[i];
 
-        var usage = currentUsages[usedLabelName];
-        var usedLabel = currentLabels[usedLabelName];
-        if (usedLabel) {
-          var usedLabelType = usedLabel["(type)"];
-          isImmutable = usedLabelType === "const" || usedLabelType === "import";
+        var usage = currentUsages[usedBindingName];
+        var usedBinding = currentBindings[usedBindingName];
+        if (usedBinding) {
+          var usedBindingType = usedBinding["(type)"];
+          isImmutable = usedBindingType === "const" || usedBindingType === "import";
 
-          if (usedLabel["(useOutsideOfScope)"] && !state.option.funcscope) {
+          if (usedBinding["(useOutsideOfScope)"] && !state.option.funcscope) {
             var usedTokens = usage["(tokens)"];
             for (j = 0; j < usedTokens.length; j++) {
               // Keep the consistency of https://github.com/jshint/jshint/issues/2409
-              if (usedLabel["(function)"] === usedTokens[j]["(function)"]) {
-                error("W038", usedTokens[j], usedLabelName);
+              if (usedBinding["(function)"] === usedTokens[j]["(function)"]) {
+                error("W038", usedTokens[j], usedBindingName);
               }
             }
           }
 
-          // mark the label used
-          _current["(labels)"][usedLabelName]["(unused)"] = false;
+          // mark the binding used
+          _current["(bindings)"][usedBindingName]["(unused)"] = false;
 
           // check for modifying a const
           if (isImmutable && usage["(modified)"]) {
             for (j = 0; j < usage["(modified)"].length; j++) {
-              error("E013", usage["(modified)"][j], usedLabelName);
+              error("E013", usage["(modified)"][j], usedBindingName);
             }
           }
 
-          isFunction = usedLabelType === "function" ||
-            usedLabelType === "generator function" ||
-            usedLabelType === "async function";
+          isFunction = usedBindingType === "function" ||
+            usedBindingType === "generator function" ||
+            usedBindingType === "async function";
 
           // check for re-assigning a function declaration
-          if ((isFunction || usedLabelType === "class") && usage["(reassigned)"]) {
+          if ((isFunction || usedBindingType === "class") && usage["(reassigned)"]) {
             for (j = 0; j < usage["(reassigned)"].length; j++) {
               if (!usage["(reassigned)"][j].ignoreW021) {
-                warning("W021", usage["(reassigned)"][j], usedLabelName, usedLabelType);
+                warning("W021", usage["(reassigned)"][j], usedBindingName, usedBindingType);
               }
             }
           }
@@ -22728,24 +22776,24 @@ var scopeManager = function(state, predefined, exported, declared) {
         }
 
         if (subScope) {
-          var labelType = this.labeltype(usedLabelName);
-          isImmutable = labelType === "const" ||
-            (labelType === null && _scopeStack[0]["(predefined)"][usedLabelName] === false);
+          var bindingType = this.bindingtype(usedBindingName);
+          isImmutable = bindingType === "const" ||
+            (bindingType === null && _scopeStack[0]["(predefined)"][usedBindingName] === false);
           if (isUnstackingFunctionOuter && !isImmutable) {
             if (!state.funct["(outerMutables)"]) {
               state.funct["(outerMutables)"] = [];
             }
-            state.funct["(outerMutables)"].push(usedLabelName);
+            state.funct["(outerMutables)"].push(usedBindingName);
           }
 
           // not exiting the global scope, so copy the usage down in case its an out of scope usage
-          if (!subScope["(usages)"][usedLabelName]) {
-            subScope["(usages)"][usedLabelName] = usage;
+          if (!subScope["(usages)"][usedBindingName]) {
+            subScope["(usages)"][usedBindingName] = usage;
             if (isUnstackingFunctionBody) {
-              subScope["(usages)"][usedLabelName]["(onlyUsedSubFunction)"] = true;
+              subScope["(usages)"][usedBindingName]["(onlyUsedSubFunction)"] = true;
             }
           } else {
-            var subScopeUsage = subScope["(usages)"][usedLabelName];
+            var subScopeUsage = subScope["(usages)"][usedBindingName];
             subScopeUsage["(modified)"] = subScopeUsage["(modified)"].concat(usage["(modified)"]);
             subScopeUsage["(tokens)"] = subScopeUsage["(tokens)"].concat(usage["(tokens)"]);
             subScopeUsage["(reassigned)"] =
@@ -22753,16 +22801,16 @@ var scopeManager = function(state, predefined, exported, declared) {
           }
         } else {
           // this is exiting global scope, so we finalise everything here - we are at the end of the file
-          if (typeof _current["(predefined)"][usedLabelName] === "boolean") {
+          if (typeof _current["(predefined)"][usedBindingName] === "boolean") {
 
             // remove the declared token, so we know it is used
-            delete declared[usedLabelName];
+            delete declared[usedBindingName];
 
             // note it as used so it can be reported
-            usedPredefinedAndGlobals[usedLabelName] = marker;
+            usedPredefinedAndGlobals[usedBindingName] = marker;
 
             // check for re-assigning a read-only (set to false) predefined
-            if (_current["(predefined)"][usedLabelName] === false && usage["(reassigned)"]) {
+            if (_current["(predefined)"][usedBindingName] === false && usage["(reassigned)"]) {
               for (j = 0; j < usage["(reassigned)"].length; j++) {
                 if (!usage["(reassigned)"][j].ignoreW020) {
                   warning("W020", usage["(reassigned)"][j]);
@@ -22771,7 +22819,7 @@ var scopeManager = function(state, predefined, exported, declared) {
             }
           }
           else {
-            // label usage is not predefined and we have not found a declaration
+            // binding usage is not predefined and we have not found a declaration
             // so report as undeclared
             for (j = 0; j < usage["(tokens)"].length; j++) {
               var undefinedToken = usage["(tokens)"][j];
@@ -22779,13 +22827,13 @@ var scopeManager = function(state, predefined, exported, declared) {
               if (!undefinedToken.forgiveUndef) {
                 // if undef is on and undef was on when the token was defined
                 if (state.option.undef && !undefinedToken.ignoreUndef) {
-                  warning("W117", undefinedToken, usedLabelName);
+                  warning("W117", undefinedToken, usedBindingName);
                 }
-                if (impliedGlobals[usedLabelName]) {
-                  impliedGlobals[usedLabelName].line.push(undefinedToken.line);
+                if (impliedGlobals[usedBindingName]) {
+                  impliedGlobals[usedBindingName].line.push(undefinedToken.line);
                 } else {
-                  impliedGlobals[usedLabelName] = {
-                    name: usedLabelName,
+                  impliedGlobals[usedBindingName] = {
+                    name: usedBindingName,
                     line: [undefinedToken.line]
                   };
                 }
@@ -22798,49 +22846,50 @@ var scopeManager = function(state, predefined, exported, declared) {
       // if exiting the global scope, we can warn about declared globals that haven't been used yet
       if (!subScope) {
         Object.keys(declared)
-          .forEach(function(labelNotUsed) {
-            _warnUnused(labelNotUsed, declared[labelNotUsed], "var");
+          .forEach(function(bindingNotUsed) {
+            _warnUnused(bindingNotUsed, declared[bindingNotUsed], "var");
           });
       }
 
-      // If this is not a function boundary, transfer function-scoped labels to
+      // If this is not a function boundary, transfer function-scoped bindings to
       // the parent block (a rough simulation of variable hoisting). Previously
-      // existing labels in the parent block should take precedence so that things and stuff.
+      // existing bindings in the parent block should take precedence so that
+      // prior usages are not discarded.
       if (subScope && !isUnstackingFunctionBody &&
         !isUnstackingFunctionParams && !isUnstackingFunctionOuter) {
-        var labelNames = Object.keys(currentLabels);
-        for (i = 0; i < labelNames.length; i++) {
+        var bindingNames = Object.keys(currentBindings);
+        for (i = 0; i < bindingNames.length; i++) {
 
-          var defLabelName = labelNames[i];
-          var defLabel = currentLabels[defLabelName];
+          var defBindingName = bindingNames[i];
+          var defBinding = currentBindings[defBindingName];
 
-          if (!defLabel["(blockscoped)"] && defLabel["(type)"] !== "exception") {
-            var shadowed = subScope["(labels)"][defLabelName];
+          if (!defBinding["(blockscoped)"] && defBinding["(type)"] !== "exception") {
+            var shadowed = subScope["(bindings)"][defBindingName];
 
-            // Do not overwrite a label if it exists in the parent scope
+            // Do not overwrite a binding if it exists in the parent scope
             // because it is shared by adjacent blocks. Copy the `unused`
             // property so that any references found within the current block
             // are counted toward that higher-level declaration.
             if (shadowed) {
-              shadowed["(unused)"] &= defLabel["(unused)"];
+              shadowed["(unused)"] &= defBinding["(unused)"];
 
-            // "Hoist" the variable to the parent block, decorating the label
+            // "Hoist" the variable to the parent block, decorating the binding
             // so that future references, though technically valid, can be
             // reported as "out-of-scope" in the absence of the `funcscope`
             // option.
             } else {
-              defLabel["(useOutsideOfScope)"] =
+              defBinding["(useOutsideOfScope)"] =
                 // Do not warn about out-of-scope usages in the global scope
                 _currentFunctBody["(type)"] !== "global" &&
-                // When a higher scope contains a binding for the label, the
-                // label is a re-declaration and should not prompt "used
+                // When a higher scope contains a binding for the binding, the
+                // binding is a re-declaration and should not prompt "used
                 // out-of-scope" warnings.
-                !this.funct.has(defLabelName, { excludeCurrent: true });
+                !this.funct.has(defBindingName, { excludeCurrent: true });
 
-              subScope["(labels)"][defLabelName] = defLabel;
+              subScope["(bindings)"][defBindingName] = defBinding;
             }
 
-            delete currentLabels[defLabelName];
+            delete currentBindings[defBindingName];
           }
         }
       }
@@ -22861,53 +22910,53 @@ var scopeManager = function(state, predefined, exported, declared) {
     /**
      * Add a function parameter to the current scope.
      *
-     * @param {string} labelName - the value of the identifier
+     * @param {string} bindingName - the value of the identifier
      * @param {Token} token
-     * @param {string} [type] - JSHint label type; defaults to "param"
+     * @param {string} [type] - binding type; defaults to "param"
      */
-    addParam: function(labelName, token, type) {
+    addParam: function(bindingName, token, type) {
       type = type || "param";
 
       if (type === "exception") {
         // if defined in the current function
-        var previouslyDefinedLabelType = this.funct.labeltype(labelName);
-        if (previouslyDefinedLabelType && previouslyDefinedLabelType !== "exception") {
+        var previouslyDefinedBindingType = this.funct.bindingtype(bindingName);
+        if (previouslyDefinedBindingType && previouslyDefinedBindingType !== "exception") {
           // and has not been used yet in the current function scope
           if (!state.option.node) {
-            warning("W002", state.tokens.next, labelName);
+            warning("W002", state.tokens.next, bindingName);
           }
         }
 
-        if (state.isStrict() && (labelName === "arguments" || labelName === "eval")) {
+        if (state.isStrict() && (bindingName === "arguments" || bindingName === "eval")) {
           warning("E008", token);
         }
       }
 
       // The variable was declared in the current scope
-      if (_.has(_current["(labels)"], labelName)) {
-        _current["(labels)"][labelName].duplicated = true;
+      if (_.has(_current["(bindings)"], bindingName)) {
+        _current["(bindings)"][bindingName].duplicated = true;
 
       // The variable was declared in an outer scope
       } else {
         // if this scope has the variable defined, it's a re-definition error
-        _checkOuterShadow(labelName, token);
+        _checkOuterShadow(bindingName, token);
 
-        _current["(labels)"][labelName] = {
+        _current["(bindings)"][bindingName] = {
           "(type)" : type,
           "(token)": token,
           "(unused)": true };
 
-        _current["(params)"].push(labelName);
+        _current["(params)"].push(bindingName);
       }
 
-      if (_.has(_current["(usages)"], labelName)) {
-        var usage = _current["(usages)"][labelName];
+      if (_.has(_current["(usages)"], bindingName)) {
+        var usage = _current["(usages)"][bindingName];
         // if its in a sub function it is not necessarily an error, just latedef
         if (usage["(onlyUsedSubFunction)"]) {
-          _latedefWarning(type, labelName, token);
+          _latedefWarning(type, bindingName, token);
         } else {
           // this is a clear illegal usage for block scoped variables
-          warning("E056", token, labelName, type);
+          warning("E056", token, bindingName, type);
         }
       }
     },
@@ -22934,19 +22983,19 @@ var scopeManager = function(state, predefined, exported, declared) {
         return;
       }
 
-      currentFunctParamScope["(params)"].forEach(function(labelName) {
-        var label = currentFunctParamScope["(labels)"][labelName];
+      currentFunctParamScope["(params)"].forEach(function(bindingName) {
+        var binding = currentFunctParamScope["(bindings)"][bindingName];
 
-        if (label.duplicated) {
+        if (binding.duplicated) {
           if (isStrict || isArrow || isMethod || !isSimple) {
-            warning("E011", label["(token)"], labelName);
+            warning("E011", binding["(token)"], bindingName);
           } else if (state.option.shadow !== true) {
-            warning("W004", label["(token)"], labelName);
+            warning("W004", binding["(token)"], bindingName);
           }
         }
 
-        if (isStrict && (labelName === "arguments" || labelName === "eval")) {
-          warning("E008", label["(token)"]);
+        if (isStrict && (bindingName === "arguments" || bindingName === "eval")) {
+          warning("E008", binding["(token)"]);
         }
       });
     },
@@ -23007,26 +23056,26 @@ var scopeManager = function(state, predefined, exported, declared) {
      * Determine if a given name has been defined in the current scope or any
      * lower scope.
      *
-     * @param {string} labelName - the value of the identifier
+     * @param {string} bindingName - the value of the identifier
      *
      * @return {boolean}
      */
-    has: function(labelName) {
-      return Boolean(_getLabel(labelName));
+    has: function(bindingName) {
+      return Boolean(_getBinding(bindingName));
     },
 
     /**
-     * Retrieve  described by `labelName` or null
+     * Retrieve binding described by `bindingName` or null
      *
-     * @param {string} labelName - the value of the identifier
+     * @param {string} bindingName - the value of the identifier
      *
-     * @returns {string|null} - the type of the JSHint label or `null` if no
-     *                          such label exists
+     * @returns {string|null} - the type of the binding or `null` if no such
+     *                          binding exists
      */
-    labeltype: function(labelName) {
-      var scopeLabels = _getLabel(labelName);
-      if (scopeLabels) {
-        return scopeLabels[labelName]["(type)"];
+    bindingtype: function(bindingName) {
+      var scopeBindings = _getBinding(bindingName);
+      if (scopeBindings) {
+        return scopeBindings[bindingName]["(type)"];
       }
       return null;
     },
@@ -23034,23 +23083,23 @@ var scopeManager = function(state, predefined, exported, declared) {
     /**
      * For the exported options, indicating a variable is used outside the file
      *
-     * @param {string} labelName - the value of the identifier
+     * @param {string} bindingName - the value of the identifier
      */
-    addExported: function(labelName) {
-      var globalLabels = _scopeStack[0]["(labels)"];
-      if (_.has(declared, labelName)) {
+    addExported: function(bindingName) {
+      var globalBindings = _scopeStack[0]["(bindings)"];
+      if (_.has(declared, bindingName)) {
         // remove the declared token, so we know it is used
-        delete declared[labelName];
-      } else if (_.has(globalLabels, labelName)) {
-        globalLabels[labelName]["(unused)"] = false;
+        delete declared[bindingName];
+      } else if (_.has(globalBindings, bindingName)) {
+        globalBindings[bindingName]["(unused)"] = false;
       } else {
         for (var i = 1; i < _scopeStack.length; i++) {
           var scope = _scopeStack[i];
           // if `scope.(type)` is not defined, it is a block scope
           if (!scope["(type)"]) {
-            if (_.has(scope["(labels)"], labelName) &&
-                !scope["(labels)"][labelName]["(blockscoped)"]) {
-              scope["(labels)"][labelName]["(unused)"] = false;
+            if (_.has(scope["(bindings)"], bindingName) &&
+                !scope["(bindings)"][bindingName]["(blockscoped)"]) {
+              scope["(bindings)"][bindingName]["(unused)"] = false;
               return;
             }
           } else {
@@ -23058,41 +23107,41 @@ var scopeManager = function(state, predefined, exported, declared) {
             break;
           }
         }
-        exported[labelName] = true;
+        exported[bindingName] = true;
       }
     },
 
     /**
-     * Mark a JSHint label as "exported" by an ES2015 module
+     * Mark a binding as "exported" by an ES2015 module
      *
-     * @param {string} labelName - the value of the identifier
+     * @param {string} bindingName - the value of the identifier
      * @param {object} token
      */
-    setExported: function(labelName, token) {
-      this.block.use(labelName, token);
+    setExported: function(bindingName, token) {
+      this.block.use(bindingName, token);
     },
 
     /**
-     * Mark a JSHint label as "initialized." This is necessary to enforce the
+     * Mark a binding as "initialized." This is necessary to enforce the
      * "temporal dead zone" (TDZ) of block-scoped bindings which are not
      * hoisted.
      *
-     * @param {string} labelName - the value of the identifier
+     * @param {string} bindingName - the value of the identifier
      */
-    initialize: function(labelName) {
-      if (_current["(labels)"][labelName]) {
-        _current["(labels)"][labelName]["(initialized)"] = true;
+    initialize: function(bindingName) {
+      if (_current["(bindings)"][bindingName]) {
+        _current["(bindings)"][bindingName]["(initialized)"] = true;
       }
     },
 
     /**
-     * Create a new JSHint label and add it to the current scope. Delegates to
-     * the internal `block.add` or `func.add` methods depending on the type.
+     * Create a new binding and add it to the current scope. Delegates to the
+     * internal `block.add` or `func.add` methods depending on the type.
      * Produces warnings and errors as necessary.
      *
-     * @param {string} labelName
+     * @param {string} bindingName
      * @param {Object} opts
-     * @param {String} opts.type - the type of the label e.g. "param", "var",
+     * @param {String} opts.type - the type of the binding e.g. "param", "var",
      *                             "let, "const", "import", "function",
      *                             "generator function", "async function",
      *                             "async generator function"
@@ -23100,7 +23149,7 @@ var scopeManager = function(state, predefined, exported, declared) {
      * @param {boolean} opts.initialized - whether the binding should be
      *                                     created in an "initialized" state.
      */
-    addlabel: function(labelName, opts) {
+    addbinding: function(bindingName, opts) {
 
       var type  = opts.type;
       var token = opts.token;
@@ -23110,34 +23159,34 @@ var scopeManager = function(state, predefined, exported, declared) {
       var ishoisted = type === "function" || type === "generator function" ||
         type === "async function" || type === "import";
       var isexported    = (isblockscoped ? _current : _currentFunctBody)["(type)"] === "global" &&
-                          _.has(exported, labelName);
+                          _.has(exported, bindingName);
 
       // outer shadow check (inner is only on non-block scoped)
-      _checkOuterShadow(labelName, token);
+      _checkOuterShadow(bindingName, token);
 
-      if (state.isStrict() && (labelName === "arguments" || labelName === "eval")) {
+      if (state.isStrict() && (bindingName === "arguments" || bindingName === "eval")) {
         warning("E008", token);
       }
 
       if (isblockscoped) {
 
-        var declaredInCurrentScope = _current["(labels)"][labelName];
+        var declaredInCurrentScope = _current["(bindings)"][bindingName];
         // for block scoped variables, params are seen in the current scope as the root function
         // scope, so check these too.
         if (!declaredInCurrentScope && _current === _currentFunctBody &&
           _current["(type)"] !== "global") {
-          declaredInCurrentScope = !!_currentFunctBody["(parent)"]["(labels)"][labelName];
+          declaredInCurrentScope = !!_currentFunctBody["(parent)"]["(bindings)"][bindingName];
         }
 
         // if its not already defined (which is an error, so ignore) and is used in TDZ
-        if (!declaredInCurrentScope && _current["(usages)"][labelName]) {
-          var usage = _current["(usages)"][labelName];
+        if (!declaredInCurrentScope && _current["(usages)"][bindingName]) {
+          var usage = _current["(usages)"][bindingName];
           // if its in a sub function it is not necessarily an error, just latedef
           if (usage["(onlyUsedSubFunction)"] || ishoisted) {
-            _latedefWarning(type, labelName, token);
+            _latedefWarning(type, bindingName, token);
           } else if (!ishoisted) {
             // this is a clear illegal usage for block scoped variables
-            warning("E056", token, labelName, type);
+            warning("E056", token, bindingName, type);
           }
         }
 
@@ -23150,75 +23199,75 @@ var scopeManager = function(state, predefined, exported, declared) {
         // 2. this is not a "hoisted" block-scoped binding
         if (declaredInCurrentScope &&
           (!ishoisted || (_current["(type)"] !== "global" || type === "import"))) {
-          warning("E011", token, labelName);
+          warning("E011", token, bindingName);
         }
         else if (state.option.shadow === "outer") {
 
           // if shadow is outer, for block scope we want to detect any shadowing within this function
-          if (scopeManagerInst.funct.has(labelName)) {
-            warning("W004", token, labelName);
+          if (scopeManagerInst.funct.has(bindingName)) {
+            warning("W004", token, bindingName);
           }
         }
 
         scopeManagerInst.block.add(
-          labelName, type, token, !isexported, opts.initialized
+          bindingName, type, token, !isexported, opts.initialized
         );
 
       } else {
 
-        var declaredInCurrentFunctionScope = scopeManagerInst.funct.has(labelName);
+        var declaredInCurrentFunctionScope = scopeManagerInst.funct.has(bindingName);
 
         // check for late definition, ignore if already declared
-        if (!declaredInCurrentFunctionScope && usedSoFarInCurrentFunction(labelName)) {
-          _latedefWarning(type, labelName, token);
+        if (!declaredInCurrentFunctionScope && usedSoFarInCurrentFunction(bindingName)) {
+          _latedefWarning(type, bindingName, token);
         }
 
         // defining with a var or a function when a block scope variable of the same name
         // is in scope is an error
-        if (scopeManagerInst.funct.has(labelName, { onlyBlockscoped: true })) {
-          warning("E011", token, labelName);
+        if (scopeManagerInst.funct.has(bindingName, { onlyBlockscoped: true })) {
+          warning("E011", token, bindingName);
         } else if (state.option.shadow !== true) {
           // now since we didn't get any block scope variables, test for var/function
           // shadowing
-          if (declaredInCurrentFunctionScope && labelName !== "__proto__") {
+          if (declaredInCurrentFunctionScope && bindingName !== "__proto__") {
 
             // see https://github.com/jshint/jshint/issues/2400
             if (_currentFunctBody["(type)"] !== "global") {
-              warning("W004", token, labelName);
+              warning("W004", token, bindingName);
             }
           }
         }
 
-        scopeManagerInst.funct.add(labelName, type, token, !isexported);
+        scopeManagerInst.funct.add(bindingName, type, token, !isexported);
 
         if (_currentFunctBody["(type)"] === "global" && !state.impliedClosure()) {
-          usedPredefinedAndGlobals[labelName] = marker;
+          usedPredefinedAndGlobals[bindingName] = marker;
         }
       }
     },
 
     funct: {
       /**
-       * Return the type of the provided JSHint label given certain options
+       * Return the type of the provided binding given certain options
        *
-       * @param {string} labelName
+       * @param {string} bindingName
        * @param {Object=} [options]
        * @param {boolean} [options.onlyBlockscoped] - only include block scoped
-       *                                              labels
+       *                                              bindings
        * @param {boolean} [options.excludeParams] - exclude the param scope
        * @param {boolean} [options.excludeCurrent] - exclude the current scope
        *
        * @returns {String}
        */
-      labeltype: function(labelName, options) {
+      bindingtype: function(bindingName, options) {
         var onlyBlockscoped = options && options.onlyBlockscoped;
         var excludeParams = options && options.excludeParams;
         var currentScopeIndex = _scopeStack.length - (options && options.excludeCurrent ? 2 : 1);
         for (var i = currentScopeIndex; i >= 0; i--) {
           var current = _scopeStack[i];
-          if (current["(labels)"][labelName] &&
-            (!onlyBlockscoped || current["(labels)"][labelName]["(blockscoped)"])) {
-            return current["(labels)"][labelName]["(type)"];
+          if (current["(bindings)"][bindingName] &&
+            (!onlyBlockscoped || current["(bindings)"][bindingName]["(blockscoped)"])) {
+            return current["(bindings)"][bindingName]["(type)"];
           }
           var scopeCheck = excludeParams ? _scopeStack[ i - 1 ] : current;
           if (scopeCheck && scopeCheck["(type)"] === "functionparams") {
@@ -23236,11 +23285,11 @@ var scopeManager = function(state, predefined, exported, declared) {
        *
        * @returns {boolean}
        */
-      hasBreakLabel: function(labelName) {
+      hasLabel: function(labelName) {
         for (var i = _scopeStack.length - 1; i >= 0; i--) {
           var current = _scopeStack[i];
 
-          if (current["(breakLabels)"][labelName]) {
+          if (current["(labels)"][labelName]) {
             return true;
           }
           if (current["(type)"] === "functionparams") {
@@ -23254,30 +23303,30 @@ var scopeManager = function(state, predefined, exported, declared) {
        * Determine if a given name has been defined in the current function
        * scope.
        *
-       * @param {string} labelName - the value of the identifier
+       * @param {string} bindingName - the value of the identifier
        * @param {object} options - options as supported by the
-       *                           `funct.labeltype` method
+       *                           `funct.bindingtype` method
        *
        * @return {boolean}
        */
-      has: function(labelName, options) {
-        return Boolean(this.labeltype(labelName, options));
+      has: function(bindingName, options) {
+        return Boolean(this.bindingtype(bindingName, options));
       },
 
       /**
-       * Create a new function-scoped JSHint label and add it to the current
-       * scope. See the `block.add` method for coresponding logic to create
-       * block-scoped JSHint labels.
+       * Create a new function-scoped binding and add it to the current scope.
+       * See the `block.add` method for coresponding logic to create
+       * block-scoped bindings.
        *
-       * @param {string} labelName - the value of the identifier
-       * @param {string} type - the type of the JSHint label; either "function"
-       *                        or "var"
+       * @param {string} bindingName - the value of the identifier
+       * @param {string} type - the type of the binding; either "function" or
+       *                        "var"
        * @param {object} tok - the token that triggered the definition
-       * @param {boolean} unused - `true` if the JSHint label has not been
+       * @param {boolean} unused - `true` if the binding has not been
        *                           referenced
        */
-      add: function(labelName, type, tok, unused) {
-        _current["(labels)"][labelName] = {
+      add: function(bindingName, type, tok, unused) {
+        _current["(bindings)"][bindingName] = {
           "(type)" : type,
           "(token)": tok,
           "(blockscoped)": false,
@@ -23298,13 +23347,13 @@ var scopeManager = function(state, predefined, exported, declared) {
       },
 
       /**
-       * Resolve a reference to a binding and mark the corresponding JSHint
-       * label as "used."
+       * Resolve a reference to a binding and mark the corresponding binding as
+       * "used."
        *
-       * @param {string} labelName - the value of the identifier
+       * @param {string} bindingName - the value of the identifier
        * @param {object} token - the token value that triggered the reference
        */
-      use: function(labelName, token) {
+      use: function(bindingName, token) {
         // If the name resolves to a parameter of the current function, then do
         // not store usage. This is because in cases such as the following:
         //
@@ -23316,13 +23365,13 @@ var scopeManager = function(state, predefined, exported, declared) {
         // the usage of `a` will resolve to the parameter, not to the unset
         // variable binding.
         var paramScope = _currentFunctBody["(parent)"];
-        if (paramScope && paramScope["(labels)"][labelName] &&
-          paramScope["(labels)"][labelName]["(type)"] === "param") {
+        if (paramScope && paramScope["(bindings)"][bindingName] &&
+          paramScope["(bindings)"][bindingName]["(type)"] === "param") {
 
           // then check its not declared by a block scope variable
-          if (!scopeManagerInst.funct.has(labelName,
+          if (!scopeManagerInst.funct.has(bindingName,
                 { excludeParams: true, onlyBlockscoped: true })) {
-            paramScope["(labels)"][labelName]["(unused)"] = false;
+            paramScope["(bindings)"][bindingName]["(unused)"] = false;
           }
         }
 
@@ -23330,58 +23379,58 @@ var scopeManager = function(state, predefined, exported, declared) {
           token.ignoreUndef = true;
         }
 
-        _setupUsages(labelName);
+        _setupUsages(bindingName);
 
-        _current["(usages)"][labelName]["(onlyUsedSubFunction)"] = false;
+        _current["(usages)"][bindingName]["(onlyUsedSubFunction)"] = false;
 
         if (token) {
           token["(function)"] = _currentFunctBody;
-          _current["(usages)"][labelName]["(tokens)"].push(token);
+          _current["(usages)"][bindingName]["(tokens)"].push(token);
         }
 
         // Block-scoped bindings can't be used within their initializer due to
         // "temporal dead zone" (TDZ) restrictions.
-        var label = _current["(labels)"][labelName];
-        if (label && label["(blockscoped)"] && !label["(initialized)"]) {
-          error("E056", token, labelName, label["(type)"]);
+        var binding = _current["(bindings)"][bindingName];
+        if (binding && binding["(blockscoped)"] && !binding["(initialized)"]) {
+          error("E056", token, bindingName, binding["(type)"]);
         }
       },
 
-      reassign: function(labelName, token) {
+      reassign: function(bindingName, token) {
         token.ignoreW020 = state.ignored.W020;
         token.ignoreW021 = state.ignored.W021;
 
-        this.modify(labelName, token);
+        this.modify(bindingName, token);
 
-        _current["(usages)"][labelName]["(reassigned)"].push(token);
+        _current["(usages)"][bindingName]["(reassigned)"].push(token);
       },
 
-      modify: function(labelName, token) {
+      modify: function(bindingName, token) {
 
-        _setupUsages(labelName);
+        _setupUsages(bindingName);
 
-        _current["(usages)"][labelName]["(onlyUsedSubFunction)"] = false;
-        _current["(usages)"][labelName]["(modified)"].push(token);
+        _current["(usages)"][bindingName]["(onlyUsedSubFunction)"] = false;
+        _current["(usages)"][bindingName]["(modified)"].push(token);
       },
 
       /**
-       * Create a new block-scoped JSHint label and add it to the current
-       * scope. See the `funct.add` method for coresponding logic to create
-       * function-scoped JSHint labels.
+       * Create a new block-scoped binding and add it to the current scope. See
+       * the `funct.add` method for coresponding logic to create
+       * function-scoped bindings.
        *
-       * @param {string} labelName - the value of the identifier
-       * @param {string} type - the type of the JSHint label; one of "class",
+       * @param {string} bindingName - the value of the identifier
+       * @param {string} type - the type of the binding; one of "class",
        *                        "const", "function", "import", or "let"
        * @param {object} tok - the token that triggered the definition
-       * @param {boolean} unused - `true` if the JSHint label has not been
+       * @param {boolean} unused - `true` if the binding has not been
        *                           referenced
-       * @param {boolean} initialized - `true` if the JSHint label has been
-       *                                initialized (as is the case with JSHint
-       *                                labels created via `import`
+       * @param {boolean} initialized - `true` if the binding has been
+       *                                initialized (as is the case with
+       *                                bindings created via `import`
        *                                declarations)
        */
-      add: function(labelName, type, tok, unused, initialized) {
-        _current["(labels)"][labelName] = {
+      add: function(bindingName, type, tok, unused, initialized) {
+        _current["(bindings)"][bindingName] = {
           "(type)" : type,
           "(token)": tok,
           "(initialized)": !!initialized,
@@ -23389,9 +23438,9 @@ var scopeManager = function(state, predefined, exported, declared) {
           "(unused)": unused };
       },
 
-      addBreakLabel: function(labelName, opts) {
+      addLabel: function(labelName, opts) {
         var token = opts.token;
-        if (scopeManagerInst.funct.hasBreakLabel(labelName)) {
+        if (scopeManagerInst.funct.hasLabel(labelName)) {
           warning("E011", token, labelName);
         }
         else if (state.option.shadow === "outer") {
@@ -23401,7 +23450,7 @@ var scopeManager = function(state, predefined, exported, declared) {
             _checkOuterShadow(labelName, token);
           }
         }
-        _current["(breakLabels)"][labelName] = token;
+        _current["(labels)"][labelName] = token;
       }
     }
   };
@@ -23476,6 +23525,15 @@ var state = {
 
   inMoz: function() {
     return this.option.moz;
+  },
+
+  /**
+   * Determine if constructs introduced in ECMAScript 10 should be accepted.
+   *
+   * @returns {boolean}
+   */
+  inES10: function() {
+    return this.esVersion >= 10;
   },
 
   /**
@@ -24637,8 +24695,6 @@ var JSHINT = (function() {
     membersOnly,
     predefined,    // Global variables defined by option
 
-    urls,
-
     extraModules = [],
     emitter = new events.EventEmitter();
 
@@ -24730,6 +24786,10 @@ var JSHINT = (function() {
 
     if (token.id === "await" && (!(context & prodParams.async) && !state.option.module)) {
       return false;
+    }
+
+    if (token.id === "yield" && (!(context & prodParams.yield))) {
+      return state.isStrict();
     }
 
     return true;
@@ -25024,10 +25084,9 @@ var JSHINT = (function() {
     }
 
     if (directiveToken.type === "globals") {
-      body.forEach(function(g, idx) {
-        g = g.split(":");
-        var key = g[0].trim();
-        var val = (g[1] || "").trim();
+      body.forEach(function(item, idx) {
+        var parts = item.split(":");
+        var key = parts[0].trim();
 
         if (key === "-" || !key.length) {
           // Ignore trailing comma
@@ -25040,12 +25099,11 @@ var JSHINT = (function() {
 
         if (key.charAt(0) === "-") {
           key = key.slice(1);
-          val = false;
 
           JSHINT.blacklist[key] = key;
           delete predefined[key];
         } else {
-          predef[key] = (val === "true");
+          predef[key] = parts.length > 1 && parts[1].trim() === "true";
         }
       });
 
@@ -25102,10 +25160,11 @@ var JSHINT = (function() {
 
     if (directiveToken.type === "jshint" || directiveToken.type === "jslint" ||
       directiveToken.type === "jshint.unstable") {
-      body.forEach(function(g) {
-        g = g.split(":");
-        var key = g[0].trim();
-        var val = (g[1] || "").trim();
+      body.forEach(function(item) {
+        var parts = item.split(":");
+        var key = parts[0].trim();
+        var val = parts.length > 1 ? parts[1].trim() : "";
+        var numberVal;
 
         if (!checkOption(key, directiveToken.type !== "jshint.unstable", directiveToken)) {
           return;
@@ -25114,14 +25173,15 @@ var JSHINT = (function() {
         if (numvals.indexOf(key) >= 0) {
           // GH988 - numeric options can be disabled by setting them to `false`
           if (val !== "false") {
-            val = +val;
+            numberVal = +val;
 
-            if (typeof val !== "number" || !isFinite(val) || val <= 0 || Math.floor(val) !== val) {
-              error("E032", directiveToken, g[1].trim());
+            if (typeof numberVal !== "number" || !isFinite(numberVal) ||
+              numberVal <= 0 || Math.floor(numberVal) !== numberVal) {
+              error("E032", directiveToken, val);
               return;
             }
 
-            state.option[key] = val;
+            state.option[key] = numberVal;
           } else {
             state.option[key] = key === "indent" ? 4 : false;
           }
@@ -25258,6 +25318,7 @@ var JSHINT = (function() {
           case "7":
           case "8":
           case "9":
+          case "10":
             state.option.moz = false;
             state.option.esversion = +val;
             break;
@@ -25265,6 +25326,7 @@ var JSHINT = (function() {
           case "2016":
           case "2017":
           case "2018":
+          case "2019":
             state.option.moz = false;
             // Translate specification publication year to version number.
             state.option.esversion = +val - 2009;
@@ -25444,13 +25506,21 @@ var JSHINT = (function() {
     if (next.id === "in" && context & prodParams.noin) {
       return true;
     }
+
     if (next.id === ";" || next.id === "}" || next.id === ":") {
       return true;
     }
-    if (next.infix === curr.infix || curr.ltBoundary === "after" ||
-      next.ltBoundary === "before") {
-      return curr.line !== startLine(next);
+
+    if (next.infix === curr.infix ||
+      // Infix operators which follow `yield` should only be consumed as part
+      // of the current expression if allowed by the syntactic grammar. In
+      // effect, this prevents automatic semicolon insertion when `yield` is
+      // followed by a newline and a comma operator (without enabling it when
+      // `yield` is followed by a newline and a `[` token).
+      (curr.id === "yield" && curr.rbp < next.rbp)) {
+      return !sameLine(curr, next);
     }
+
     return false;
   }
 
@@ -25557,43 +25627,51 @@ var JSHINT = (function() {
 
   // Functions for conformance of style.
 
-  function startLine(token) {
-    return token.startLine || token.line;
+  function sameLine(first, second) {
+    return first.line === (second.startLine || second.line);
   }
 
   function nobreaknonadjacent(left, right) {
-    if (!state.option.laxbreak && left.line !== startLine(right)) {
+    if (!state.option.laxbreak && !sameLine(left, right)) {
       warning("W014", right, right.value);
     }
   }
 
   function nolinebreak(t) {
     t = t;
-    if (t.line !== startLine(state.tokens.next)) {
+    if (!sameLine(t, state.tokens.next)) {
       warning("E022", t, t.value);
     }
   }
 
-  function nobreakcomma(left, right) {
-    if (left.line !== startLine(right)) {
-      if (!state.option.laxcomma) {
-        if (parseComma.first) {
-          warning("I001");
-          parseComma.first = false;
-        }
-        warning("W014", left, right.value);
-      }
-    }
-  }
-
-  function parseComma(opts) {
+  /**
+   * Validate the comma token in the "current" position of the token stream.
+   *
+   * @param {object} [opts]
+   * @param {boolean} [opts.property] - flag indicating whether the current
+   *                                    comma token is situated directly within
+   *                                    an object initializer
+   * @param {boolean} [opts.allowTrailing] - flag indicating whether the
+   *                                         current comma token may appear
+   *                                         directly before a delimiter
+   *
+   * @returns {boolean} flag indicating the validity of the current comma
+   *                    token; `false` if the token directly causes a syntax
+   *                    error, `true` otherwise
+   */
+  function checkComma(opts) {
+    var prev = state.tokens.prev;
+    var curr = state.tokens.curr;
     opts = opts || {};
 
-    if (!opts.peek) {
-      nobreakcomma(state.tokens.curr, state.tokens.next);
-      advance(",");
-    } else {
-      nobreakcomma(state.tokens.prev, state.tokens.curr);
+    if (!sameLine(prev, curr)) {
+      if (!state.option.laxcomma) {
+        if (checkComma.first) {
+          warning("I001", curr);
+          checkComma.first = false;
+        }
+        warning("W014", prev, curr.value);
+      }
     }
 
     if (state.tokens.next.identifier && !(opts.property && state.inES5())) {
@@ -25791,7 +25869,7 @@ var JSHINT = (function() {
    *                     support cases where further refinement is necessary)
    */
   function type(s, f) {
-    var x = delim(s);
+    var x = symbol(s, 0);
     x.type = s;
     x.nud = f;
     return x;
@@ -25976,7 +26054,7 @@ var JSHINT = (function() {
     "undefined", "boolean", "number", "string", "function", "object",
   ];
   typeofValues.es3 = typeofValues.es3.concat(typeofValues.legacy);
-  typeofValues.es6 = typeofValues.es3.concat("symbol");
+  typeofValues.es6 = typeofValues.es3.concat("symbol", "bigint");
 
   /**
    * Validate comparisons between the result of a `typeof` expression and a
@@ -26002,8 +26080,17 @@ var JSHINT = (function() {
 
     values = state.inES6() ? typeofValues.es6 : typeofValues.es3;
 
-    if (right.type === "(identifier)" && right.value === "typeof" && left.type === "(string)")
+    if (right.type === "(identifier)" && right.value === "typeof" && left.type === "(string)") {
+      if (left.value === "bigint") {
+        if (!state.option.unstable.bigint) {
+          warning("W144", left, "BigInt", "bigint");
+        }
+
+        return false;
+      }
+
       return !_.includes(values, left.value);
+    }
 
     return false;
   }
@@ -26128,10 +26215,21 @@ var JSHINT = (function() {
       }
 
       return true;
-    } else if (left.identifier && !isReserved(context, left) && !left.isMetaProperty &&
-      left.value !== "eval" && left.value !== "arguments") {
-      if (state.funct["(scope)"].labeltype(left.value) === "exception") {
+    } else if (left.identifier && !isReserved(context, left) && !left.isMetaProperty) {
+      if (state.funct["(scope)"].bindingtype(left.value) === "exception") {
         warning("W022", left);
+      }
+
+      if (left.value === "eval" && state.isStrict()) {
+        error("E031", assignToken);
+        return false;
+      } else if (left.value === "arguments") {
+        if (!state.isStrict()) {
+          warning("W143", assignToken);
+        } else {
+          error("E031", assignToken);
+          return false;
+        }
       }
       state.nameStack.set(left);
       return true;
@@ -26149,13 +26247,11 @@ var JSHINT = (function() {
    * @param {function} [f] - a function to be invoked that consumes the
    *                         right-hand side of the operator (see the `infix`
    *                         function)
-   * @param {number} p - the left-binding power of the token as used by the
-   *                     Pratt parsing semantics
    *
    * @returns {object} - the object describing the JSHint symbol (provided to
    *                     support cases where further refinement is necessary)
    */
-  function assignop(s, f, p) {
+  function assignop(s, f) {
     var x = infix(s, typeof f === "function" ? f : function(context, left, that) {
       that.left = left;
 
@@ -26164,10 +26260,11 @@ var JSHINT = (function() {
       that.right = expression(context, 10);
 
       return that;
-    }, p);
+    }, 20);
 
     x.exps = true;
     x.assign = true;
+
     return x;
   }
 
@@ -26208,7 +26305,8 @@ var JSHINT = (function() {
    *                     support cases where further refinement is necessary)
    */
   function bitwiseassignop(s) {
-    return assignop(s, function(context, left, that) {
+    symbol(s, 20).exps = true;
+    return infix(s, function(context, left, that) {
       if (state.option.bitwise) {
         warning("W016", that, that.id);
       }
@@ -26389,18 +26487,18 @@ var JSHINT = (function() {
       // don't complain about unclosed templates / strings
       if (state.tokens.next.isUnclosed) return advance();
 
-      var sameLine = startLine(state.tokens.next) === state.tokens.curr.line &&
-                     state.tokens.next.id !== "(end)";
+      var isSameLine = sameLine(state.tokens.curr, state.tokens.next) &&
+                       state.tokens.next.id !== "(end)";
       var blockEnd = checkPunctuator(state.tokens.next, "}");
 
-      if (sameLine && !blockEnd && !(stmt.id === "do" && state.inES6(true))) {
+      if (isSameLine && !blockEnd && !(stmt.id === "do" && state.inES6(true))) {
         errorAt("E058", state.tokens.curr.line, state.tokens.curr.character);
       } else if (!state.option.asi) {
 
         // If this is the last statement in a block that ends on the same line
         // *and* option lastsemic is on, ignore the warning.  Otherwise, issue
         // a warning about missing semicolon.
-        if (!(blockEnd && sameLine && state.option.lastsemic)) {
+        if (!(blockEnd && isSameLine && state.option.lastsemic)) {
           warningAt("W033", state.tokens.curr.line, state.tokens.curr.character);
         }
       }
@@ -26445,7 +26543,7 @@ var JSHINT = (function() {
 
       hasOwnScope = true;
       state.funct["(scope)"].stack();
-      state.funct["(scope)"].block.addBreakLabel(t.value, { token: state.tokens.curr });
+      state.funct["(scope)"].block.addLabel(t.value, { token: state.tokens.curr });
 
       if (!state.tokens.next.labelled && state.tokens.next.value !== "{") {
         warning("W028", state.tokens.next, t.value, state.tokens.next.value);
@@ -26494,6 +26592,7 @@ var JSHINT = (function() {
       } else if (state.option.nonew && r && r.left && r.id === "(" && r.left.id === "new") {
         warning("W031", t);
       }
+
       parseFinalSemicolon(t);
     }
 
@@ -26781,7 +26880,6 @@ var JSHINT = (function() {
 
     nud: function(context) {
       var v = this.value;
-
       // If this identifier is the lone parameter to a shorthand "fat arrow"
       // function definition, i.e.
       //
@@ -26790,15 +26888,14 @@ var JSHINT = (function() {
       // ...it should not be considered as a variable in the current scope. It
       // will be added to the scope of the new function when the next token is
       // parsed, so it can be safely ignored for now.
-      if (state.tokens.next.id === "=>") {
-        return this;
-      }
+      var isLoneArrowParam = state.tokens.next.id === "=>";
 
       if (isReserved(context, this)) {
         warning("W024", this, v);
-      } else if (!state.funct["(comparray)"].check(v)) {
+      } else if (!isLoneArrowParam && !state.funct["(comparray)"].check(v)) {
         state.funct["(scope)"].block.use(v, state.tokens.curr);
       }
+
       return this;
     },
 
@@ -26886,15 +26983,15 @@ var JSHINT = (function() {
     return this;
   });
 
-  assignop("=", "assign", 20);
-  assignop("+=", "assignadd", 20);
-  assignop("-=", "assignsub", 20);
-  assignop("*=", "assignmult", 20);
-  assignop("/=", "assigndiv", 20).nud = function() {
+  assignop("=", "assign");
+  assignop("+=", "assignadd");
+  assignop("-=", "assignsub");
+  assignop("*=", "assignmult");
+  assignop("/=", "assigndiv").nud = function() {
     /* istanbul ignore next */
     error("E014");
   };
-  assignop("%=", "assignmod", 20);
+  assignop("%=", "assignmod");
   assignop("**=", function(context, left, that) {
     if (!state.inES7()) {
       warning("W119", that, "Exponentiation operator", "7");
@@ -26907,7 +27004,7 @@ var JSHINT = (function() {
     that.right = expression(context, 10);
 
     return that;
-  }, 20);
+  });
 
   bitwiseassignop("&=");
   bitwiseassignop("|=");
@@ -26916,26 +27013,18 @@ var JSHINT = (function() {
   bitwiseassignop(">>=");
   bitwiseassignop(">>>=");
   infix(",", function(context, left, that) {
-    var expr;
-    that.exprs = [left];
-
     if (state.option.nocomma) {
-      warning("W127");
+      warning("W127", that);
     }
 
-    if (!parseComma({ peek: true })) {
-      return that;
+    that.left = left;
+
+    if (checkComma()) {
+      that.right = expression(context, 10);
+    } else {
+      that.right = null;
     }
-    while (true) {
-      if (!(expr = expression(context, 10))) {
-        /* istanbul ignore next */
-        break;
-      }
-      that.exprs.push(expr);
-      if (state.tokens.next.value !== "," || !parseComma()) {
-        break;
-      }
-    }
+
     return that;
   }, 10, true);
 
@@ -27131,12 +27220,10 @@ var JSHINT = (function() {
   suffix("++");
   prefix("++", "preinc");
   state.syntax["++"].exps = true;
-  state.syntax["++"].ltBoundary = "before";
 
   suffix("--");
   prefix("--", "predec");
   state.syntax["--"].exps = true;
-  state.syntax["--"].ltBoundary = "before";
 
   prefix("delete", function(context) {
     this.arity = "unary";
@@ -27285,7 +27372,7 @@ var JSHINT = (function() {
       className = classNameToken.value;
       identifier(context);
       // unintialized, so that the 'extends' clause is parsed while the class is in TDZ
-      state.funct["(scope)"].addlabel(className, {
+      state.funct["(scope)"].addbinding(className, {
         type: "class",
         initialized: false,
         token: classNameToken
@@ -27340,7 +27427,7 @@ var JSHINT = (function() {
     state.funct["(scope)"].stack();
     if (classNameToken) {
       this.name = className;
-      state.funct["(scope)"].addlabel(className, {
+      state.funct["(scope)"].addbinding(className, {
         type: "class",
         initialized: true,
         token: classNameToken
@@ -27369,7 +27456,8 @@ var JSHINT = (function() {
       inGenerator = false;
       context &= ~prodParams.preAsync;
 
-      if (state.tokens.next.value === "static") {
+      if (state.tokens.next.value === "static" &&
+        !checkPunctuator(peek(), "(")) {
         isStatic = true;
         advance();
       }
@@ -27555,7 +27643,7 @@ var JSHINT = (function() {
     }
 
     if (state.option.asi && checkPunctuators(state.tokens.prev, [")", "]"]) &&
-      state.tokens.prev.line !== startLine(state.tokens.curr)) {
+      !sameLine(state.tokens.prev, state.tokens.curr)) {
       warning("W014", state.tokens.curr, state.tokens.curr.id);
     }
 
@@ -27586,7 +27674,8 @@ var JSHINT = (function() {
         if (state.tokens.next.id !== ",") {
           break;
         }
-        parseComma({ allowTrailing: true });
+        advance(",");
+        checkComma({ allowTrailing: true });
 
         if (state.tokens.next.id === ")") {
           if (!state.inES8()) {
@@ -27685,45 +27774,58 @@ var JSHINT = (function() {
       return pn;
     }
 
-    var exprs = [];
-
-    if (state.tokens.next.id !== ")") {
-      for (;;) {
-        exprs.push(expression(context, 10));
-
-        if (state.tokens.next.id !== ",") {
-          break;
-        }
-
-        if (state.option.nocomma) {
-          warning("W127");
-        }
-
-        parseComma();
-      }
+    // The ECMA262 grammar requires an expression between the "opening
+    // parenthesis" and "close parenthesis" tokens of the grouping operator.
+    // However, the "ignore" directive is commonly used to inject values that
+    // are not included in the token stream. For example:
+    //
+    //     return (
+    //       /*jshint ignore:start */
+    //       <div></div>
+    //       /*jshint ignore:end */
+    //     );
+    //
+    // The "empty" grouping operator is permitted in order to tolerate this
+    // pattern.
+    if (state.tokens.next.id === ")") {
+      advance(")");
+      return;
     }
 
+    ret = expression(context, 0);
+
     advance(")", this);
-    if (state.option.immed && exprs[0] && exprs[0].id === "function") {
+
+    if (!ret) {
+      return;
+    }
+
+    ret.paren = true;
+
+    if (state.option.immed && ret && ret.id === "function") {
       if (state.tokens.next.id !== "(" &&
         state.tokens.next.id !== "." && state.tokens.next.id !== "[") {
         warning("W068", this);
       }
     }
 
-    if (!exprs.length) {
-      return;
-    }
-    if (exprs.length > 1) {
-      ret = Object.create(state.syntax[","]);
-      ret.exprs = exprs;
+    if (ret.id === ",") {
+      first = ret.left;
+      while (first.id === ",") {
+        first = first.left;
+      }
 
-      first = exprs[0];
-      last = exprs[exprs.length - 1];
+      last = ret.right;
     } else {
-      ret = first = last = exprs[0];
+      first = last = ret;
 
       if (!isNecessary) {
+        // async functions are identified after parsing due to the complexity
+        // of disambiguating the `async` keyword.
+        if (!triggerFnExpr) {
+          triggerFnExpr = ret.id === "async";
+        }
+
         isNecessary =
           // Used to distinguish from an ExpressionStatement which may not
           // begin with the `{` and `function` tokens
@@ -27753,22 +27855,18 @@ var JSHINT = (function() {
       }
     }
 
-    if (ret) {
-      // The operator may be necessary to override the default binding power of
-      // neighboring operators (whenever there is an operator in use within the
-      // first expression *or* the current group contains multiple expressions)
-      if (!isNecessary && (isOperator(first) || ret.exprs)) {
-        isNecessary =
-          (rbp > first.lbp) ||
-          (rbp > 0 && rbp === first.lbp) ||
-          (!isEndOfExpr() && last.rbp < state.tokens.next.lbp);
-      }
+    // The operator may be necessary to override the default binding power of
+    // neighboring operators (whenever there is an operator in use within the
+    // first expression *or* the current group contains multiple expressions)
+    if (!isNecessary && (isOperator(first) || first !== last)) {
+      isNecessary =
+        (rbp > first.lbp) ||
+        (rbp > 0 && rbp === first.lbp) ||
+        (!isEndOfExpr() && last.rbp < state.tokens.next.lbp);
+    }
 
-      if (!isNecessary) {
-        warning("W126", opening);
-      }
-
-      ret.paren = true;
+    if (!isNecessary) {
+      warning("W126", opening);
     }
 
     return ret;
@@ -27780,7 +27878,7 @@ var JSHINT = (function() {
     var e, s, canUseDot;
 
     if (state.option.asi && checkPunctuators(state.tokens.prev, [")", "]"]) &&
-      state.tokens.prev.line !== startLine(state.tokens.curr)) {
+      !sameLine(state.tokens.prev, state.tokens.curr)) {
       warning("W014", state.tokens.curr, state.tokens.curr.id);
     }
 
@@ -27893,7 +27991,7 @@ var JSHINT = (function() {
         });
       return this;
     }
-    var b = state.tokens.curr.line !== startLine(state.tokens.next);
+    var b = !sameLine(state.tokens.curr, state.tokens.next);
     this.first = [];
     if (b) {
       indent += state.option.indent;
@@ -27928,7 +28026,8 @@ var JSHINT = (function() {
 
       this.first.push(expression(context, 10));
       if (state.tokens.next.id === ",") {
-        parseComma({ allowTrailing: true });
+        advance(",");
+        checkComma({ allowTrailing: true });
         if (state.tokens.next.id === "]" && !state.inES5()) {
           warning("W070", state.tokens.curr);
           break;
@@ -28087,7 +28186,8 @@ var JSHINT = (function() {
         if (pastRest) {
           warning("W131", state.tokens.next);
         }
-        parseComma({ allowTrailing: true });
+        advance(",");
+        checkComma({ allowTrailing: true });
       }
 
       if (state.tokens.next.id === ")") {
@@ -28137,7 +28237,7 @@ var JSHINT = (function() {
       "(context)"   : null,
       "(scope)"     : null,
       "(comparray)" : null,
-      "(generator)" : null,
+      "(yielded)"   : null,
       "(arrow)"     : null,
       "(async)"     : null,
       "(params)"    : null
@@ -28260,6 +28360,12 @@ var JSHINT = (function() {
     } else {
       context &= ~prodParams.async;
     }
+
+    if (isGenerator) {
+      context |= prodParams.yield;
+    } else if (!isArrow) {
+      context &= ~prodParams.yield;
+    }
     context &= ~prodParams.preAsync;
 
     state.option = Object.create(state.option);
@@ -28270,7 +28376,6 @@ var JSHINT = (function() {
       "(context)":   state.funct,
       "(arrow)":     isArrow,
       "(method)":    isMethod,
-      "(generator)": isGenerator,
       "(async)":     isAsync
     });
 
@@ -28312,6 +28417,8 @@ var JSHINT = (function() {
     }
 
     if (isArrow) {
+      context &= ~prodParams.yield;
+
       if (!state.inES6(true)) {
         warning("W119", state.tokens.curr, "arrow function syntax (=>)", "6");
       }
@@ -28323,8 +28430,7 @@ var JSHINT = (function() {
 
     block(context, false, true, true, isArrow);
 
-    if (!state.option.noyield && isGenerator &&
-        state.funct["(generator)"] !== "yielded") {
+    if (!state.option.noyield && isGenerator && !state.funct["(yielded)"]) {
       warning("W124", state.tokens.curr);
     }
 
@@ -28402,17 +28508,17 @@ var JSHINT = (function() {
   // Parse assignments that were found instead of conditionals.
   // For example: if (a = 1) { ... }
 
-  function checkCondAssignment(expr) {
-    var id, paren;
-    if (expr) {
-      id = expr.id;
-      paren = expr.paren;
-      if (id === "," && (expr = expr.exprs[expr.exprs.length - 1])) {
-        id = expr.id;
-        paren = paren || expr.paren;
-      }
+  function checkCondAssignment(token) {
+    if (!token || token.paren) {
+      return;
     }
-    switch (id) {
+
+    if (token.id === ",") {
+      checkCondAssignment(token.right);
+      return;
+    }
+
+    switch (token.id) {
     case "=":
     case "+=":
     case "-=":
@@ -28422,8 +28528,8 @@ var JSHINT = (function() {
     case "|=":
     case "^=":
     case "/=":
-      if (!paren && !state.option.boss) {
-        warning("W084");
+      if (!state.option.boss) {
+        warning("W084", token);
       }
     }
   }
@@ -28469,7 +28575,7 @@ var JSHINT = (function() {
       var props = Object.create(null); // All properties, including accessors
       var isAsyncMethod = false;
 
-      b = state.tokens.curr.line !== startLine(state.tokens.next);
+      b = !sameLine(state.tokens.curr, state.tokens.next);
       if (b) {
         indent += state.option.indent;
         if (state.tokens.next.from === indent + state.option.indent) {
@@ -28511,7 +28617,7 @@ var JSHINT = (function() {
           }
 
           if (state.tokens.next.id === "[") {
-            i = computedPropertyName();
+            i = computedPropertyName(context);
           } else {
             i = propertyName(context);
 
@@ -28604,7 +28710,8 @@ var JSHINT = (function() {
         countMember(i);
 
         if (state.tokens.next.id === ",") {
-          parseComma({ allowTrailing: true, property: true });
+          advance(",");
+          checkComma({ allowTrailing: true, property: true });
           if (state.tokens.next.id === ",") {
             /* istanbul ignore next */
             warning("W070", state.tokens.curr);
@@ -28889,7 +28996,7 @@ var JSHINT = (function() {
             }
           }
           if (t.id) {
-            state.funct["(scope)"].addlabel(t.id, {
+            state.funct["(scope)"].addbinding(t.id, {
               type: type,
               token: t.token });
             names.push(t.token);
@@ -28906,11 +29013,13 @@ var JSHINT = (function() {
         }
         var id = state.tokens.prev;
         value = expression(context, 10);
-        if (value && value.identifier && value.value === "undefined") {
-          warning("W080", id, id.value);
-        }
-        if (!lone) {
-          destructuringPatternMatch(names, value);
+        if (value) {
+          if (value.identifier && value.value === "undefined") {
+            warning("W080", id, id.value);
+          }
+          if (!lone) {
+            destructuringPatternMatch(names, value);
+          }
         }
       }
 
@@ -28937,7 +29046,8 @@ var JSHINT = (function() {
       }
 
       statement.hasComma = true;
-      parseComma();
+      advance(",");
+      checkComma();
     }
     if (letblock) {
       advance(")");
@@ -29065,7 +29175,7 @@ var JSHINT = (function() {
             }
           }
           if (t.id) {
-            state.funct["(scope)"].addlabel(t.id, {
+            state.funct["(scope)"].addbinding(t.id, {
               type: "var",
               token: t.token });
 
@@ -29092,12 +29202,14 @@ var JSHINT = (function() {
         }
         id = state.tokens.prev;
         value = expression(context, 10);
-        if (value && !state.funct["(loopage)"] && value.identifier &&
-          value.value === "undefined") {
-          warning("W080", id, id.value);
-        }
-        if (!lone) {
-          destructuringPatternMatch(names, value);
+        if (value) {
+          if (!state.funct["(loopage)"] && value.identifier &&
+            value.value === "undefined") {
+            warning("W080", id, id.value);
+          }
+          if (!lone) {
+            destructuringPatternMatch(names, value);
+          }
         }
       }
 
@@ -29107,7 +29219,8 @@ var JSHINT = (function() {
         break;
       }
       this.hasComma = true;
-      parseComma();
+      advance(",");
+      checkComma();
     }
 
     return this;
@@ -29148,7 +29261,7 @@ var JSHINT = (function() {
         warning("W025");
       }
     } else {
-      state.funct["(scope)"].addlabel(nameToken.value, {
+      state.funct["(scope)"].addbinding(nameToken.value, {
         type: labelType,
         token: state.tokens.curr,
         initialized: true });
@@ -29209,6 +29322,10 @@ var JSHINT = (function() {
       type: generator ? "generator" : null
     });
 
+    if (generator && nameToken && nameToken.value === "yield") {
+      error("E024", nameToken, "yield");
+    }
+
     if (nameToken && (f["(name)"] === "arguments" || f["(name)"] === "eval") &&
       f["(isStrict)"]) {
       error("E008", nameToken);
@@ -29220,7 +29337,6 @@ var JSHINT = (function() {
   blockstmt("if", function(context) {
     var t = state.tokens.next;
     increaseComplexityCount();
-    state.condition = true;
     advance("(");
     var expr = expression(context, 0);
 
@@ -29244,7 +29360,6 @@ var JSHINT = (function() {
     }
 
     advance(")", t);
-    state.condition = false;
     var s = block(context, true, true);
 
     // When the if is within a for-in loop and the condition has a negative form,
@@ -29268,12 +29383,10 @@ var JSHINT = (function() {
 
   blockstmt("try", function(context) {
     var b;
+    var hasParameter = false;
 
-    function doCatch() {
-      advance("catch");
+    function catchParameter() {
       advance("(");
-
-      state.funct["(scope)"].stack("catchparams");
 
       if (checkPunctuators(state.tokens.next, ["[", "{"])) {
         var tokens = destructuringPattern(context);
@@ -29299,9 +29412,6 @@ var JSHINT = (function() {
       }
 
       advance(")");
-
-      block(context, false);
-      state.funct["(scope)"].unstack();
     }
 
     block(context | prodParams.tryClause, true);
@@ -29311,7 +29421,20 @@ var JSHINT = (function() {
       if (b && (!state.inMoz())) {
         warning("W118", state.tokens.next, "multiple catch blocks");
       }
-      doCatch();
+      advance("catch");
+      if (state.tokens.next.id !== "{") {
+        state.funct["(scope)"].stack("catchparams");
+        hasParameter = true;
+        catchParameter();
+      } else if (!state.inES10()) {
+        warning("W119", state.tokens.curr, "optional catch binding", "10");
+      }
+      block(context, false);
+
+      if (hasParameter) {
+        state.funct["(scope)"].unstack();
+        hasParameter = false;
+      }
       b = true;
     }
 
@@ -29362,6 +29485,7 @@ var JSHINT = (function() {
     var t = state.tokens.next;
     var g = false;
     var noindent = false;
+    var seenCase = false;
 
     state.funct["(breakage)"] += 1;
     advance("(");
@@ -29376,8 +29500,6 @@ var JSHINT = (function() {
 
     if (!noindent)
       indent += state.option.indent;
-
-    this.cases = [];
 
     for (;;) {
       switch (state.tokens.next.id) {
@@ -29407,7 +29529,8 @@ var JSHINT = (function() {
         }
 
         advance("case");
-        this.cases.push(expression(context, 0));
+        expression(context, 0);
+        seenCase = true;
         increaseComplexityCount();
         g = true;
         advance(":");
@@ -29430,10 +29553,8 @@ var JSHINT = (function() {
         default:
           // Do not display a warning if 'default' is the first statement or if
           // there is a special /* falls through */ comment.
-          if (this.cases.length) {
-            if (!state.tokens.curr.caseFallsThrough) {
-              warning("W086", state.tokens.curr, "default");
-            }
+          if (seenCase && !state.tokens.curr.caseFallsThrough) {
+            warning("W086", state.tokens.curr, "default");
           }
         }
 
@@ -29737,7 +29858,8 @@ var JSHINT = (function() {
           if (state.tokens.next.id !== ",") {
             break;
           }
-          parseComma();
+          advance(",");
+          checkComma();
         }
       }
       advance(")", t);
@@ -29761,9 +29883,9 @@ var JSHINT = (function() {
     if (!state.option.asi)
       nolinebreak(this);
 
-    if (state.tokens.next.id !== ";" && !state.tokens.next.reach &&
-        state.tokens.curr.line === startLine(state.tokens.next)) {
-      if (!state.funct["(scope)"].funct.hasBreakLabel(v)) {
+    if (state.tokens.next.identifier &&
+        sameLine(state.tokens.curr, state.tokens.next)) {
+      if (!state.funct["(scope)"].funct.hasLabel(v)) {
         warning("W090", state.tokens.next, v);
       }
       this.first = state.tokens.next;
@@ -29789,9 +29911,9 @@ var JSHINT = (function() {
     if (!state.option.asi)
       nolinebreak(this);
 
-    if (state.tokens.next.id !== ";" && !state.tokens.next.reach) {
-      if (state.tokens.curr.line === startLine(state.tokens.next)) {
-        if (!state.funct["(scope)"].funct.hasBreakLabel(v)) {
+    if (state.tokens.next.identifier) {
+      if (sameLine(state.tokens.curr, state.tokens.next)) {
+        if (!state.funct["(scope)"].funct.hasLabel(v)) {
           warning("W090", state.tokens.next, v);
         }
         this.first = state.tokens.next;
@@ -29806,14 +29928,14 @@ var JSHINT = (function() {
 
 
   stmt("return", function(context) {
-    if (this.line === startLine(state.tokens.next)) {
+    if (sameLine(this, state.tokens.next)) {
       if (state.tokens.next.id !== ";" && !state.tokens.next.reach) {
         this.first = expression(context, 0);
 
         if (this.first &&
             this.first.type === "(punctuator)" && this.first.value === "=" &&
             !this.first.paren && !state.option.boss) {
-          warningAt("W093", this.first.line, this.first.character);
+          warning("W093", this.first);
         }
 
         if (state.option.noreturnawait && context & prodParams.async &&
@@ -29843,7 +29965,7 @@ var JSHINT = (function() {
         error("E024", this, "await");
       }
 
-      expression(context, 0);
+      expression(context, 10);
       return this;
     } else {
       this.exps = false;
@@ -29908,14 +30030,19 @@ var JSHINT = (function() {
     return state.syntax["(identifier)"].nud.apply(this, arguments);
   })));
 
-  (function(x) {
-    x.exps = true;
-    x.lbp = x.rbp = 25;
-    x.ltBoundary = "after";
-  }(prefix("yield", function(context) {
+  (function(yieldSymbol) {
+    yieldSymbol.rbp = yieldSymbol.lbp = 25;
+    yieldSymbol.exps = true;
+  })(prefix("yield", function(context) {
     if (state.inMoz()) {
       return mozYield.call(this, context);
     }
+
+    if (!(context & prodParams.yield)) {
+      this.exps = false;
+      return state.syntax["(identifier)"].nud.apply(this, arguments);
+    }
+
     var prev = state.tokens.prev;
 
     // If the parameters of the current function scope have not been defined,
@@ -29929,22 +30056,17 @@ var JSHINT = (function() {
       error("E061", this);
     }
 
-    if (state.inES6(true) && !state.funct["(generator)"]) {
-      // If it's a yield within a catch clause inside a generator then that's ok
-      if (!("(catch)" === state.funct["(name)"] && state.funct["(context)"]["(generator)"])) {
-        error("E046", state.tokens.curr, "yield");
-      }
-    } else if (!state.inES6()) {
+    if (!state.inES6()) {
       warning("W104", state.tokens.curr, "yield", "6");
     }
-    state.funct["(generator)"] = "yielded";
+    state.funct["(yielded)"] = true;
 
     if (state.tokens.next.value === "*") {
       advance("*");
     }
 
     // Parse operand
-    if (!isEndOfExpr() && state.tokens.next.id !== ",") {
+    if (state.tokens.curr.value === "*" || sameLine(state.tokens.curr, state.tokens.next)) {
       if (state.tokens.next.nud) {
 
         nobreaknonadjacent(state.tokens.curr, state.tokens.next);
@@ -29952,7 +30074,7 @@ var JSHINT = (function() {
 
         if (this.first.type === "(punctuator)" && this.first.value === "=" &&
             !this.first.paren && !state.option.boss) {
-          warningAt("W093", this.first.line, this.first.character);
+          warning("W093", this.first);
         }
       } else if (state.tokens.next.led) {
         if (state.tokens.next.id !== ",") {
@@ -29962,7 +30084,7 @@ var JSHINT = (function() {
     }
 
     return this;
-  })));
+  }));
 
   /**
    * Parsing logic for non-standard Mozilla implementation of `yield`
@@ -29970,13 +30092,10 @@ var JSHINT = (function() {
    */
   var mozYield = function(context) {
     var prev = state.tokens.prev;
-    if (state.inES6(true) && !state.funct["(generator)"]) {
-      // If it's a yield within a catch clause inside a generator then that's ok
-      if (!("(catch)" === state.funct["(name)"] && state.funct["(context)"]["(generator)"])) {
-        error("E046", state.tokens.curr, "yield");
-      }
+    if (state.inES6(true) && !(context & prodParams.yield)) {
+      error("E046", state.tokens.curr, "yield");
     }
-    state.funct["(generator)"] = "yielded";
+    state.funct["(yielded)"] = true;
     var delegatingYield = false;
 
     if (state.tokens.next.value === "*") {
@@ -29984,7 +30103,7 @@ var JSHINT = (function() {
       advance("*");
     }
 
-    if (this.line === startLine(state.tokens.next)) {
+    if (sameLine(this, state.tokens.next)) {
       if (delegatingYield ||
           (state.tokens.next.id !== ";" && !state.option.asi &&
            !state.tokens.next.reach && state.tokens.next.nud)) {
@@ -29994,12 +30113,11 @@ var JSHINT = (function() {
 
         if (this.first.type === "(punctuator)" && this.first.value === "=" &&
             !this.first.paren && !state.option.boss) {
-          warningAt("W093", this.first.line, this.first.character);
+          warning("W093", this.first);
         }
       }
-
       if (state.tokens.next.id !== ")" &&
-          (prev.lbp > 30 || (!prev.assign && !isEndOfExpr()) || prev.id === "yield")) {
+          (prev.lbp > 30 || (!prev.assign && !isEndOfExpr()))) {
         error("E050", this);
       }
     } else if (!state.option.asi) {
@@ -30036,7 +30154,7 @@ var JSHINT = (function() {
       // ImportClause :: ImportedDefaultBinding
       this.name = identifier(context);
       // Import bindings are immutable (see ES6 8.1.1.5.5)
-      state.funct["(scope)"].addlabel(this.name, {
+      state.funct["(scope)"].addbinding(this.name, {
         type: "import",
         initialized: true,
         token: state.tokens.curr });
@@ -30063,7 +30181,7 @@ var JSHINT = (function() {
       if (state.tokens.next.identifier) {
         this.name = identifier(context);
         // Import bindings are immutable (see ES6 8.1.1.5.5)
-        state.funct["(scope)"].addlabel(this.name, {
+        state.funct["(scope)"].addbinding(this.name, {
           type: "import",
           initialized: true,
           token: state.tokens.curr });
@@ -30089,7 +30207,7 @@ var JSHINT = (function() {
         }
 
         // Import bindings are immutable (see ES6 8.1.1.5.5)
-        state.funct["(scope)"].addlabel(importName, {
+        state.funct["(scope)"].addbinding(importName, {
           type: "import",
           initialized: true,
           token: state.tokens.curr });
@@ -30872,7 +30990,6 @@ var JSHINT = (function() {
     });
 
     functions = [state.funct];
-    urls = [];
     member = {};
     membersOnly = null;
     inblock = false;
@@ -30989,7 +31106,7 @@ var JSHINT = (function() {
       combine(predefined, g || {});
 
       //reset values
-      parseComma.first = true;
+      checkComma.first = true;
 
       advance();
       switch (state.tokens.next.id) {
@@ -31068,11 +31185,6 @@ var JSHINT = (function() {
     var impliedGlobals = state.funct["(scope)"].getImpliedGlobals();
     if (impliedGlobals.length > 0) {
       data.implieds = impliedGlobals;
-    }
-
-    if (urls.length > 0) {
-      /* istanbul ignore next */
-      data.urls = urls;
     }
 
     globals = state.funct["(scope)"].getUsedOrDefinedGlobals();

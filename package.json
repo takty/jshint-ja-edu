@@ -1,6 +1,6 @@
 {
   "name": "jshint-ja-edu",
-  "version": "2.10.2",
+  "version": "2.11.0",
   "description": "Japanese translation of JSHint messages for educational purpose",
   "author": "Takuto Yanagida",
   "repository": {
@@ -16,7 +16,7 @@
   "scripts": {
     "browser-test-server": "node tests/helpers/browser/server",
     "build": "node bin/build",
-    "coverage": "istanbul -- cover ./node_modules/nodeunit/bin/nodeunit tests/unit",
+    "coverage": "istanbul -- cover ./node_modules/nodeunit/bin/nodeunit tests/unit tests/unit/unstable",
     "coverage-report": "npm run coverage && istanbul report html",
     "data": "node scripts/generate-identifier-data",
     "fetch-test262": "git submodule init && git submodule update",
@@ -29,7 +29,8 @@
     "test-cli": "nodeunit tests/cli.js",
     "test-node": "npm run test-unit && npm run test-cli && npm run test-regression",
     "test-regression": "nodeunit tests/regression",
-    "test-unit": "nodeunit tests/unit",
+    "test-unit": "nodeunit tests/unit tests/unit/unstable",
+    "test-website": "node tests/website.js",
     "test": "npm run test-node && npm run test-browser"
   },
   "main": "./src/jshint.js",
@@ -52,9 +53,8 @@
     "istanbul": "^0.4.5",
     "jscs": "1.11.x",
     "mock-stdin": "0.3.x",
-    "nodeunit": "^0.11.3",
-    "phantom": "~4.0.1",
-    "phantomjs-prebuilt": "~2.1.7",
+    "nodeunit": "0.9.x",
+    "puppeteer": "1.20.0",
     "regenerate": "1.2.x",
     "results-interpreter": "~1.0.0",
     "sinon": "1.12.x",

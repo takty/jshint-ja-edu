@@ -391,7 +391,7 @@ exports.returnStatement = function (test) {
   var src = fs.readFileSync(__dirname + '/fixtures/return.js', 'utf8');
 
   TestRun(test)
-    .addError(3, 15, "Did you mean to return a conditional instead of an assignment?")
+    .addError(3, 14, "Did you mean to return a conditional instead of an assignment?")
     .addError(38, 5, "Line breaking error 'return'.")
     .addError(38, 11, "Missing semicolon.")
     .addError(39, 7, "Unnecessary semicolon.")
@@ -927,6 +927,19 @@ exports.testES6Modules = function (test) {
       "export function afterLabelExported() {}",
       "import afterLabelImported from 'elsewhere';"
     ], { esversion: 6 });
+
+  TestRun(test, "invalid ImportsList")
+    .addError(1, 12, "Unexpected 'y'.")
+    .addError(1, 12, "Expected 'from' and instead saw 'y'.")
+    .addError(1, 14, "Expected '(string)' and instead saw '}'.")
+    .addError(1, 15, "Missing semicolon.")
+    .addError(1, 16, "Expected an assignment or function call and instead saw an expression.")
+    .addError(1, 20, "Missing semicolon.")
+    .addError(1, 21, "Expected an assignment or function call and instead saw an expression.")
+    .addError(1, 16, "'from' is not defined.")
+    .test([
+      "import { x y } from 'elsewhere';"
+    ], { esversion: 6, module: true });
 
   TestRun(test, "async as Identifier")
     .test([

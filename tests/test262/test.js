@@ -21,7 +21,6 @@ var incorrectSeverity = {
   W024: true,
   W025: true,
   W052: true,
-  W067: true,
   W076: true,
   W077: true,
   W090: true,
@@ -39,6 +38,8 @@ function isFailure(errors) {
   return errors && !!find(errors, function(msg) {
     if (msg.code[0] === "W") {
       return msg.code in incorrectSeverity;
+    } else if (msg.code[0] === "I") {
+      return false;
     }
 
     return !(msg.code in incorrectSeverity);
@@ -49,7 +50,14 @@ module.exports = function(test) {
   var isModule = !!test.attrs.flags.module;
 
   try {
-    JSHint(test.contents, { esversion: 9, maxerr: Infinity, module: isModule });
+    JSHint(test.contents, {
+      esversion: 10,
+      maxerr: Infinity,
+      module: isModule,
+      unstable: {
+        bigint: true
+      }
+    });
   } catch (e) {
     return false;
   }

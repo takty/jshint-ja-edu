@@ -211,6 +211,42 @@ exports.assignment = function (test) {
   run.test(code, { plusplus: true, esnext: true });
   run.test(code, { plusplus: true, moz: true });
 
+  TestRun(test, "assignment to `eval` outside of strict mode code")
+    .test([
+      "(function() {",
+      "  var eval = 3;",
+      "}());"
+    ]);
+
+  TestRun(test, "assignment to `eval` within strict mode code")
+    .addError(5, 10, "Bad assignment.")
+    .test([
+      "(function() {",
+      "  var eval;",
+      "  (function() {",
+      "    'use strict';",
+      "    eval = 3;",
+      "  }());",
+      "}());"
+    ]);
+
+  TestRun(test, "assignment to `arguments` outside of strict mode code")
+    .addError(2, 13, "Assignment to properties of a mapped arguments object may cause unexpected changes to formal parameters.")
+    .test([
+      "(function() {",
+      "  arguments = 3;",
+      "}());"
+    ]);
+
+  TestRun(test, "assignment to `arguments` within strict mode code")
+    .addError(3, 13, "Bad assignment.")
+    .test([
+      "(function() {",
+      "  'use strict';",
+      "  arguments = 3;",
+      "}());"
+    ]);
+
   test.done();
 };
 
@@ -243,6 +279,53 @@ exports.relations = function (test) {
   run.test(code, {}); // es5
   run.test(code, {esnext: true});
   run.test(code, {moz: true});
+
+  TestRun(test, "No suitable expression following logical NOT.")
+    .addError(1, 7, "Expected an identifier and instead saw ';'.")
+    .addError(1, 6, "Unrecoverable syntax error. (100% scanned).")
+    .test("void !;");
+
+  TestRun(test, "Logical NOT in combination with 'infix' operators.")
+    .addError(3, 6, "Confusing use of '!'.")
+    .addError(4, 6, "Confusing use of '!'.")
+    .addError(5, 6, "Confusing use of '!'.")
+    .addError(6, 6, "Confusing use of '!'.")
+    .addError(7, 6, "Confusing use of '!'.")
+    .addError(8, 6, "Confusing use of '!'.")
+    .addError(9, 6, "Confusing use of '!'.")
+    .addError(10, 6, "Confusing use of '!'.")
+    .addError(11, 6, "Confusing use of '!'.")
+    .addError(12, 6, "Confusing use of '!'.")
+    .addError(13, 6, "Confusing use of '!'.")
+    .addError(14, 6, "Confusing use of '!'.")
+    .addError(15, 6, "Confusing use of '!'.")
+    .test([
+      "void !'-';",
+      "void !'+';",
+      "void !(0 < 0);",
+      "void !(0 <= 0);",
+      "void !(0 == 0);",
+      "void !(0 === 0);",
+      "void !(0 !== 0);",
+      "void !(0 != 0);",
+      "void !(0 > 0);",
+      "void !(0 >= 0);",
+      "void !(0 + 0);",
+      "void !(0 - 0);",
+      "void !(0 * 0);",
+      "void !(0 / 0);",
+      "void !(0 % 0);",
+    ]);
+
+  TestRun(test, "Logical NOT in combination with other unary operators.")
+    .addError(3, 6, "Confusing use of '!'.")
+    .addError(4, 6, "Confusing use of '!'.")
+    .test([
+      "void !'-';",
+      "void !'+';",
+      "void !+0;",
+      "void !-0;"
+    ]);
 
   test.done();
 };
@@ -664,6 +747,20 @@ exports.regexp.basic = function (test) {
     .addError(1, 9, "Invalid regular expression.")
     .test("var a = /.*/ii;");
 
+  TestRun(test, "Invalid Decimal Escape Sequence tolerated without `u` flag")
+    .test([
+      "void /\\00/;",
+      "void /\\01/;",
+      "void /\\02/;",
+      "void /\\03/;",
+      "void /\\04/;",
+      "void /\\05/;",
+      "void /\\06/;",
+      "void /\\07/;",
+      "void /\\08/;",
+      "void /\\09/;"
+    ]);
+
   test.done();
 };
 
@@ -707,6 +804,16 @@ exports.regexp.uFlag = function (test) {
     .test("void /.{}/u;", { esversion: 6 });
 
   TestRun(test)
+    .test([
+      "void /.{0}/;",
+      "void /.{0}/u;",
+      "void /.{9}/;",
+      "void /.{9}/u;",
+      "void /.{23}/;",
+      "void /.{23}/u;"
+    ], { esversion: 6 });
+
+  TestRun(test)
     .addError(1, 6, "Invalid regular expression.")
     .test("void /.{,2}/u;", { esversion: 6 });
 
@@ -717,6 +824,25 @@ exports.regexp.uFlag = function (test) {
   TestRun(test, "Invalid group reference")
     .addError(1, 6, "Invalid regular expression.")
     .test("void /(.)(.)\\3/u;", { esversion: 6 });
+
+  TestRun(test, "Valid group reference - multiple digits")
+    .test([
+      "void /(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)\\10/u;",
+      "void /(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)\\10a/u;",
+      "void /(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)\\11/u;",
+      "void /(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)\\11a/u;"
+    ], { esversion: 6 });
+
+  // A negative syntax test is the only way to verify JSHint is interpeting the
+  // adjacent digits as one reference as opposed to a reference followed by a
+  // literal digit.
+  TestRun(test, "Invalid group reference - two digits")
+    .addError(1, 6, "Invalid regular expression.")
+    .test("void /(.)\\10/u;", { esversion: 6 });
+
+  TestRun(test, "Invalid group reference - three digits")
+    .addError(1, 6, "Invalid regular expression.")
+    .test("void /(.)(.)(.)(.)(.)(.)(.)(.)(.)(.)\\100/u;", { esversion: 6 });
 
   TestRun(test, "Invalid group reference (permitted without flag)")
     .test("void /(.)(.)\\3/;", { esversion: 6 });
@@ -779,6 +905,29 @@ exports.regexp.uFlag = function (test) {
 
   TestRun(test)
     .test('void /[\\s0-1\\s2-3\\s]/u;', { esversion: 6 });
+
+  TestRun(test, "Null CharacterEscape")
+    .test([
+      "void /\\0/u;",
+      "void /\\0a/u;"
+    ], { esversion: 6 });
+
+  TestRun(test)
+    .addError(1, 6, "Invalid regular expression.")
+    .test("void /\\00/u;", { esversion: 6 });
+
+  TestRun(test)
+    .addError(1, 6, "Invalid regular expression.")
+    .test("void /\\01/u;", { esversion: 6 });
+
+  TestRun(test, "ControlEscape")
+    .test([
+      "void /\\f/u;",
+      "void /\\n/u;",
+      "void /\\r/u;",
+      "void /\\t/u;",
+      "void /\\v/u;"
+    ], { esversion: 6 });
 
   test.done();
 };
@@ -2387,6 +2536,25 @@ exports["destructuring assignment of valid simple assignment targets"] = functio
   TestRun(test)
     .addError(1, 15, "Bad assignment.")
     .test("({ x: new Ctor() } = {});", { esversion: 6 });
+
+  test.done();
+};
+
+exports["regression test for GH-3408"] = function (test) {
+  TestRun(test, "var statement")
+    .addError(1, 9, "Expected an identifier and instead saw ';'.")
+    .addError(1, 10, "Missing semicolon.")
+    .test("var [x]=;", { esversion: 6 });
+
+  TestRun(test, "let statement")
+    .addError(1, 9, "Expected an identifier and instead saw ';'.")
+    .addError(1, 10, "Missing semicolon.")
+    .test("let [x]=;", { esversion: 6 });
+
+  TestRun(test, "const statement")
+    .addError(1, 11, "Expected an identifier and instead saw ';'.")
+    .addError(1, 12, "Missing semicolon.")
+    .test("const [x]=;", { esversion: 6 });
 
   test.done();
 };
@@ -4025,8 +4193,10 @@ exports["mozilla generator as esnext"] = function (test) {
     "  print(g.next());"
   ];
   TestRun(test)
-    .addError(4, 5,
-     "Yield expressions may only occur within generator functions.")
+    .addError(4, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(4, 10, "Missing semicolon.")
+    .addError(4, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(4, 5, "'yield' is not defined.")
     .test(code, {esnext: true, unused: true, undef: true, predef: ["print", "Iterator"]});
 
   TestRun(test)
@@ -4064,6 +4234,19 @@ exports["catch block no curlies"] = function (test) {
   TestRun(test)
     .addError(1, 17, "Expected '{' and instead saw 'e'.")
     .test(code, {});
+
+  test.done();
+};
+
+exports.optionalCatch = function (test) {
+  var code = "try {} catch {}";
+
+  TestRun(test)
+    .addError(1, 8, "'optional catch binding' is only available in ES10 (use 'esversion: 10').")
+    .test(code);
+
+  TestRun(test)
+    .test(code, {esversion: 10});
 
   test.done();
 };
@@ -4192,7 +4375,10 @@ exports["mozilla generator as es5"] = function (test) {
     "  print(g.next());"
   ];
   TestRun(test)
-    .addError(4, 5, "'yield' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
+    .addError(4, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(4, 10, "Missing semicolon.")
+    .addError(4, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(4, 5, "'yield' is not defined.")
     .addError(5, 5, "'destructuring assignment' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
     .addError(9, 6, "'let' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
     .test(code, {unused: true, undef: true, predef: ["print", "Iterator"]}); // es5
@@ -4215,7 +4401,10 @@ exports["mozilla generator as legacy JS"] = function (test) {
     "  print(g.next());"
   ];
   TestRun(test)
-    .addError(4, 5, "'yield' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
+    .addError(4, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(4, 10, "Missing semicolon.")
+    .addError(4, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(4, 5, "'yield' is not defined.")
     .addError(5, 5, "'destructuring assignment' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
     .addError(9, 6, "'let' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
     .test(code, {es3: true, unused: true, undef: true, predef: ["print", "Iterator"]});
@@ -4402,7 +4591,10 @@ exports["moz-style array comprehension as esnext"] = function (test) {
     "print('evens:', evens);"
   ];
   TestRun(test)
-    .addError(3, 5, "Yield expressions may only occur within generator functions.")
+    .addError(3, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 10, "Missing semicolon.")
+    .addError(3, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 5, "'yield' is not defined.")
     .addError(6, 20, "Expected 'for' and instead saw 'i'.")
     .addError(6, 30, "'for each' is only available in Mozilla JavaScript extensions (use moz option).")
     .addError(7, 14, "Expected 'for' and instead saw 'i'.")
@@ -4455,7 +4647,10 @@ exports["moz-style array comprehension as es5"] = function (test) {
   ];
   TestRun(test)
     .addError(2, 8, "'let' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
-    .addError(3, 5, "'yield' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
+    .addError(3, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 10, "Missing semicolon.")
+    .addError(3, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 5, "'yield' is not defined.")
     .addError(6, 19, "'array comprehension' is only available in Mozilla JavaScript extensions (use moz option).")
     .addError(6, 20, "Expected 'for' and instead saw 'i'.")
     .addError(6, 30, "'for each' is only available in Mozilla JavaScript extensions (use moz option).")
@@ -4482,7 +4677,10 @@ exports["array comprehension as legacy JS"] = function (test) {
   ];
   TestRun(test)
     .addError(2, 8, "'let' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
-    .addError(3, 5, "'yield' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
+    .addError(3, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 10, "Missing semicolon.")
+    .addError(3, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 5, "'yield' is not defined.")
     .addError(6, 19, "'array comprehension' is only available in Mozilla JavaScript extensions (use moz option).")
     .addError(7, 13, "'array comprehension' is only available in Mozilla JavaScript extensions (use moz option).")
     .test(code, {es3: true, unused: true, undef: true, predef: ["print"]});
@@ -4505,7 +4703,11 @@ exports["moz-style array comprehension as legacy JS"] = function (test) {
   ];
   TestRun(test)
     .addError(2, 8, "'let' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
-    .addError(3, 5, "'yield' is available in ES6 (use 'esversion: 6') or Mozilla JS extensions (use moz).")
+    .addError(3, 5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 10, "Missing semicolon.")
+    .addError(3, 11, "Expected an assignment or function call and instead saw an expression.")
+    .addError(3, 5, "'yield' is not defined.")
+
     .addError(6, 19, "'array comprehension' is only available in Mozilla JavaScript extensions (use moz option).")
     .addError(6, 20, "Expected 'for' and instead saw 'i'.")
     .addError(6, 30, "'for each' is only available in Mozilla JavaScript extensions (use moz option).")
@@ -5813,7 +6015,7 @@ exports["regression test for crash from GH-964"] = function (test) {
 
   TestRun(test)
     .addError(2, 23, "Bad assignment.")
-    .addError(2, 24, "Did you mean to return a conditional instead of an assignment?")
+    .addError(2, 23, "Did you mean to return a conditional instead of an assignment?")
     .test(code);
 
   test.done();
@@ -6723,6 +6925,28 @@ exports["class and method naming"] = function (test) {
       "};"
     ], {esversion: 6});
 
+  TestRun(test, "valid uses of name `static`")
+    .test([
+      "void class {",
+      "  static() {}",
+      "  static static() {}",
+      "  static ['static']() {}",
+      "};",
+      "void class {",
+      "  * static() { yield; }",
+      "  static * static() { yield; }",
+      "  static * ['static']() { yield; }",
+      "};",
+      "void class {",
+      "  get static() {}",
+      "  set static(x) {}",
+      "  static get static() {}",
+      "  static set static(x) {}",
+      "  static get ['static']() {}",
+      "  static set ['static'](x) {}",
+      "};"
+    ], {esversion: 6});
+
   TestRun(test, "invalid use of name `prototype`: static method")
     .addError(2, 10, "A static class method cannot be named 'prototype'.")
     .test([
@@ -7255,12 +7479,12 @@ exports["test for GH-1018"] = function (test) {
   run.test(code, {boss: true});
 
   run
-    .addError(1, 11, "Expected a conditional expression and instead saw an assignment.")
-    .addError(2, 16, "Expected a conditional expression and instead saw an assignment.")
-    .addError(3, 14, "Expected a conditional expression and instead saw an assignment.")
-    .addError(4, 20, "Expected a conditional expression and instead saw an assignment.")
-    .addError(5, 20, "Expected a conditional expression and instead saw an assignment.")
-    .addError(6, 15, "Expected a conditional expression and instead saw an assignment.")
+    .addError(1, 7, "Expected a conditional expression and instead saw an assignment.")
+    .addError(2, 12, "Expected a conditional expression and instead saw an assignment.")
+    .addError(3, 10, "Expected a conditional expression and instead saw an assignment.")
+    .addError(4, 16, "Expected a conditional expression and instead saw an assignment.")
+    .addError(5, 16, "Expected a conditional expression and instead saw an assignment.")
+    .addError(6, 11, "Expected a conditional expression and instead saw an assignment.")
     .test(code);
 
   test.done();
@@ -7277,8 +7501,8 @@ exports["test warnings for assignments in conditionals"] = function (test) {
   ];
 
   var run = TestRun(test)
-    .addError(1, 10, "Expected a conditional expression and instead saw an assignment.")
-    .addError(4, 17, "Expected a conditional expression and instead saw an assignment.");
+    .addError(1, 7, "Expected a conditional expression and instead saw an assignment.")
+    .addError(4, 14, "Expected a conditional expression and instead saw an assignment.");
 
   run.test(code); // es5
 
@@ -7318,10 +7542,20 @@ exports["test for GH-1105"] = function (test) {
     "}"
   ];
 
-  var run = TestRun(test)
-    .addError(2, 22, "Missing semicolon.");
+  TestRun(test)
+    .addError(2, 22, "Missing semicolon.")
+    .test(code);
 
-  run.test(code);
+  code = [
+    "while (true) {",
+    "    if (true) { continue }",
+    "}"
+  ];
+
+  TestRun(test)
+    .addError(2, 25, "Missing semicolon.")
+    .test(code);
+
   test.done();
 };
 
@@ -7350,8 +7584,6 @@ exports["test for crash with invalid condition"] = function (test) {
     .addError(4, 16, "Missing semicolon.")
     .addError(6, 15, "Expected an identifier and instead saw ','.")
     .addError(7, 17, "Unexpected ')'.")
-    .addError(7, 17, "Expected an identifier and instead saw ')'.")
-    .addError(7, 19, "Expected ')' to match '(' from line 7 and instead saw ';'.")
     .addError(8, 15, "Expected an identifier and instead saw ','.")
     .addError(8, 16, "Expected ')' to match '(' from line 8 and instead saw 'b'.")
     .addError(8, 18, "Expected an identifier and instead saw ')'.")
@@ -7367,9 +7599,9 @@ exports["test 'yield' in compound expressions."] = function (test) {
   var run = TestRun(test);
 
   run
-    .addError(22, 15, "Did you mean to return a conditional instead of an assignment?")
+    .addError(22, 14, "Did you mean to return a conditional instead of an assignment?")
     .addError(23, 22, "Invalid position for 'yield' expression (consider wrapping in parenthesis).")
-    .addError(31, 15, "Did you mean to return a conditional instead of an assignment?")
+    .addError(31, 14, "Did you mean to return a conditional instead of an assignment?")
     .addError(32, 20, "Invalid position for 'yield' expression (consider wrapping in parenthesis).")
     .addError(32, 17, "Bad operand.")
     .addError(51, 10, "Invalid position for 'yield' expression (consider wrapping in parenthesis).")
@@ -7402,17 +7634,17 @@ exports["test 'yield' in compound expressions."] = function (test) {
     .test(code, {maxerr: 1000, expr: true, esnext: true});
 
   run = TestRun(test)
-    .addError(22, 15, "Did you mean to return a conditional instead of an assignment?")
-    .addError(31, 15, "Did you mean to return a conditional instead of an assignment?");
+    .addError(22, 14, "Did you mean to return a conditional instead of an assignment?")
+    .addError(31, 14, "Did you mean to return a conditional instead of an assignment?");
 
   // These are line-column pairs for the Mozilla paren errors.
   var needparen = [
     // comma
     [ 5,  5], [ 6,  8], [ 7,  5], [11,  5], [12,  8], [13,  5],
     // yield in yield
-    [18, 11], [19, 17], [19, 11], [20, 11], [20,  5], [21, 11], [21,  5], [21, 26], [22, 22],
-    [23, 22], [23, 11], [27, 11], [28, 17], [28, 11], [29, 11], [29,  5], [30, 11], [30,  5],
-    [30, 24], [31, 22], [32, 11], [32, 20],
+    [20, 11], [20,  5], [21, 11], [21,  5],
+    [23, 22], [29, 11], [29,  5], [30, 11], [30,  5],
+    [32, 11], [32, 20],
     // infix
     [51, 10], [53, 10], [54, 16], [57, 10], [58,  5], [59, 10], [60,  5], [60, 14],
     // prefix
@@ -7552,6 +7784,14 @@ exports["test 'yield' in invalid positions"] = function (test) {
 
   TestRun(test, "asi (ignoring warnings)")
     .test(code, { esversion: 6, expr: true, asi: true });
+
+  TestRun(test, "name of a generator expression")
+    .addError(1, 13, "Unexpected 'yield'.")
+    .test([
+      "(function * yield() {",
+      "  yield;",
+      "})();"
+    ], { esversion: 6 });
 
   test.done();
 };
@@ -9591,6 +9831,19 @@ exports.asyncFunctions.awaitOperator = function (test) {
       "};",
     ], { esversion: 8 });
 
+  // Regression test for gh-3395
+  TestRun(test, "within object initializer")
+    .test([
+      "void async function() {",
+      "  void {",
+      "    x: await 0,",
+      "    [await 0]: 0,",
+      "    get [await 0]() {},",
+      "    set [await 0](_) {},",
+      "  };",
+      "};"
+    ], { esversion: 8 });
+
   test.done();
 };
 
@@ -9839,7 +10092,10 @@ exports.asyncGenerators.classMethod = function (test) {
 
   TestRun(test, "Illegal constructor")
     .addError(1, 19, "Unexpected 'constructor'.")
-    .addError(1,44, "Yield expressions may only occur within generator functions.")
+    .addError(1, 44, "Expected an identifier and instead saw 'yield' (a reserved word).")
+    .addError(1, 44, "Expected an assignment or function call and instead saw an expression.")
+    .addError(1, 49, "Missing semicolon.")
+    .addError(1, 50, "Expected an assignment or function call and instead saw an expression.")
     .test("class C { async * constructor() { await 0; yield 0; } }", { esversion: 9 });
 
   test.done();

@@ -868,8 +868,27 @@ Lexer.prototype = {
         index += 1;
       }
 
-      if (isAllowedDigit !== isDecimalDigit) {
-        if (!isLegacy && value.length <= 2) { // 0x
+      var isBigInt = this.peek(index) === 'n';
+
+      if (isAllowedDigit !== isDecimalDigit || isBigInt) {
+        if (isBigInt) {
+          if (!state.option.unstable.bigint) {
+            this.triggerAsync(
+              "warning",
+              {
+                code: "W144",
+                line: this.line,
+                character: this.char,
+                data: [ "BigInt", "bigint" ]
+              },
+              checks,
+              function() { return true; }
+            );
+          }
+
+          value += char;
+          index += 1;
+        } else if (!isLegacy && value.length <= 2) { // 0x
           return {
             type: Token.NumericLiteral,
             value: value,
@@ -1352,17 +1371,11 @@ Lexer.prototype = {
         sequence = char;
         next = this.peek(index + 1);
         while (reg.nonzeroDigit.test(next) || next === "0") {
-          /* istanbul ignore next */
           index += 1;
-          /* istanbul ignore next */
           char = next;
-          /* istanbul ignore next */
           sequence += char;
-          /* istanbul ignore next */
           body += char;
-          /* istanbul ignore next */
           value += char;
-          /* istanbul ignore next */
           next = this.peek(index + 1);
         }
         groupReferences.push(Number(sequence));
@@ -1431,6 +1444,18 @@ Lexer.prototype = {
           checks,
           function() { return true; }
         );
+      } else if (char === "0" && reg.decimalDigit.test(this.peek(index + 1))) {
+        this.triggerAsync(
+          "error",
+          {
+            code: "E016",
+            line: this.line,
+            character: this.char,
+            data: [ "Invalid decimal escape sequence" ]
+          },
+          checks,
+          hasUFlag
+        );
       }
 
       index += 1;
@@ -1459,7 +1484,6 @@ Lexer.prototype = {
       }
 
       if (next === "}") {
-        /* istanbul ignore next */
         return true;
       }
 
@@ -1707,6 +1731,8 @@ Lexer.prototype = {
           return !escapedChars.split("").every(function(escapedChar) {
               return escapedChar === "u" ||
                 escapedChar === "/" ||
+                escapedChar === "0" ||
+                reg.regexpControlEscapes.test(escapedChar) ||
                 reg.regexpCharClasses.test(escapedChar) ||
                 reg.regexpSyntaxChars.test(escapedChar);
             });
