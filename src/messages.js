@@ -22,7 +22,7 @@ var errors = {
   // Constants
   E011: "「{a}」はすでに宣言されています。",
   E012: "定数「{a}」は初期化されていません。",
-  E013: "Attempting to override '{a}' which is a constant.",
+  E013: "定数「{a}」に値をもう一度セットしようとしています。",
 
   // Regular expressions
   E014: "A regular expression literal can be confused with '/='.",
