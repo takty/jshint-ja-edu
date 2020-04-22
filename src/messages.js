@@ -34,7 +34,7 @@ var errors = {
   E018: "Unbegun comment.",
   E019: "ここにある「{a}」とセットになる記号がありません。",
   E020: "Expected '{a}' to match '{b}' from line {c} and instead saw '{d}'.",
-  E021: "「{a}」があるべきところに、「{b}」があります。",
+  E021: "「{a}」があるはずなのに、「{b}」があります。",
   E022: "Line breaking error '{a}'.",
   E023: "Missing '{a}'.",
   E024: "「{a}」を書いてはいけません。",
@@ -42,11 +42,11 @@ var errors = {
   E026: "Missing '}' to match '{' from line {a}.",
   E027: "Missing ']' to match '[' from line {a}.",
   E028: "Illegal comma.",
-  E029: "クオーテーション・マーク（ \' か \" ）が抜けていませんか？文字列が閉じていません。",
+  E029: "文字列が閉じていません。クオーテーション・マーク（\' か \"）が抜けていませんか？",
 
   // Everything else
   E030: "識別子が期待されますが、その代わりに「{a}」があります。",
-  E031: "Bad assignment.", // FIXME: Rephrase
+  E031: "代入がおかしいです。", // FIXME: Rephrase
   E032: "Expected a small integer or 'false' and instead saw '{a}'.",
   E033: "Expected an operator and instead saw '{a}'.",
   E034: "get/set are ES5 features.",
@@ -71,7 +71,7 @@ var errors = {
   E053: "{a} declarations are only allowed at the top level of module scope.",
   E054: "Class properties must be methods. Expected '(' but instead saw '{a}'.",
   E055: "The '{a}' option cannot be set after any executable code.",
-  E056: "'{a}' was used before it was declared, which is illegal for '{b}' variables.",
+  E056: "「{a}」は定義される前に使われています。",
   E057: "Invalid meta property: '{a}.{b}'.",
   E058: "セミコロン（;）がありません。",
   E059: "Incompatible values for the '{a}' and '{b}' linting options.",
@@ -91,8 +91,8 @@ var warnings = {
   W003: "「{a}」は定義される前に使われています。",
   W004: "すでに定義されている「{a}」が、もう一度定義されています。",
   W005: "A dot following a number can be confused with a decimal point.",
-  W006: "間違えやすい「-（マイナス）」の使い方です。",
-  W007: "間違えやすい「+（プラス）」の使い方です。",
+  W006: "間違えやすいマイナス（-）の使い方です。",
+  W007: "間違えやすいプラス（+）の使い方です。",
   W008: "A leading decimal point can be confused with a dot: '{a}'.",
   W009: "The array literal notation [] is preferable.",
   W010: "The object literal notation {} is preferable.",
@@ -111,7 +111,7 @@ var warnings = {
   W022: "Do not assign to the exception parameter.",
   W023: null,
   W024: "Expected an identifier and instead saw '{a}' (a reserved word).",
-  W025: "関数定義に名前がありません。",
+  W025: "関数の定義に名前がありません。",
   W026: "Inner functions should be listed at the top of the outer function.",
   W027: "「{b}」の下の「{a}」は、実行されません。",
   W028: "Label '{a}' on {b} statement.",
@@ -175,7 +175,7 @@ var warnings = {
     "the outer function.",
   W083: "Functions declared within loops referencing an outer scoped " +
     "variable may lead to confusing semantics. ({a})",
-  W084: "Expected a conditional expression and instead saw an assignment.",
+  W084: "条件が書いてあるはずなのに、代入が書いてあります。",
   W085: "「with」は使わない下さい。",
   W086: "Expected a 'break' statement before '{a}'.",
   W087: "Forgotten 'debugger' statement?",
@@ -202,7 +202,7 @@ var warnings = {
   W108: "Strings must use doublequote.",
   W109: "Strings must use singlequote.",
   W110: "Mixed double and single quotes.",
-  W112: "クオーテーション・マーク（ \' か \" ）が抜けていませんか？文字列が閉じていません。",
+  W112: "文字列が閉じていません。クオーテーション・マーク（\' か \"）が抜けていませんか？",
   W113: "Control character in string: {a}.",
   W114: "Avoid {a}.",
   W115: "Octal literals are not allowed in strict mode.",
@@ -253,14 +253,14 @@ exports.errors = {};
 exports.warnings = {};
 exports.info = {};
 
-_.each(errors, function(desc, code) {
+_.each(errors, function (desc, code) {
   exports.errors[code] = { code: code, desc: desc };
 });
 
-_.each(warnings, function(desc, code) {
+_.each(warnings, function (desc, code) {
   exports.warnings[code] = { code: code, desc: desc };
 });
 
-_.each(info, function(desc, code) {
+_.each(info, function (desc, code) {
   exports.info[code] = { code: code, desc: desc };
 });
