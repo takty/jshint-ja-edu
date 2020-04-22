@@ -115,7 +115,7 @@ var warnings = {
   W026: "Inner functions should be listed at the top of the outer function.",
   W027: "「{b}」の下の「{a}」は、実行されません。",
   W028: "Label '{a}' on {b} statement.",
-  W030: "代入か関数呼び出しが来るはずなのに、式があります。",
+  W030: "代入か関数呼び出しがあるはずなのに、式があります。",
   W031: "Do not use 'new' for side effects.",
   W032: "必要のないセミコロン ; があります。",
   W033: "行の終わりにセミコロン ; を付けてください。",
