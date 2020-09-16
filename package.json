@@ -1,14 +1,19 @@
 {
-  "name": "jshint-ja-edu",
-  "version": "2.11.0",
-  "description": "Japanese translation of JSHint messages for educational purpose",
-  "author": "Takuto Yanagida",
+  "name": "jshint",
+  "version": "2.12.0",
+  "homepage": "http://jshint.com/",
+  "description": "Static analysis tool for JavaScript",
+  "author": {
+    "name": "Anton Kovalyov",
+    "email": "anton@kovalyov.net",
+    "url": "http://anton.kovalyov.net/"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/takty/jshint-ja-edu.git"
+    "url": "https://github.com/jshint/jshint.git"
   },
   "bugs": {
-    "url": "https://github.com/takty/jshint-ja-edu/issues"
+    "url": "https://github.com/jshint/jshint/issues"
   },
   "bin": {
     "jshint": "./bin/jshint"
@@ -39,30 +44,30 @@
     "console-browserify": "1.1.x",
     "exit": "0.1.x",
     "htmlparser2": "3.8.x",
-    "lodash": "^4.17.15",
+    "lodash": "~4.17.19",
     "minimatch": "~3.0.2",
     "shelljs": "0.3.x",
     "strip-json-comments": "1.0.x"
   },
   "devDependencies": {
     "async": "~2.1.2",
-    "browserify": "^16.5.1",
-    "conventional-changelog": "^3.1.19",
-    "conventional-github-releaser": "^3.1.3",
-    "coveralls": "^3.0.11",
-    "istanbul": "^0.4.5",
-    "jscs": "^3.0.7",
+    "browserify": "9.x",
+    "conventional-changelog": "0.4.x",
+    "conventional-github-releaser": "0.4.x",
+    "coveralls": "2.11.x",
+    "istanbul": "0.3.x",
+    "jscs": "1.11.x",
     "mock-stdin": "0.3.x",
     "nodeunit": "0.9.x",
     "puppeteer": "1.20.0",
     "regenerate": "1.2.x",
     "results-interpreter": "~1.0.0",
     "sinon": "1.12.x",
-    "test262-stream": "~1.2.1",
-    "unicode-11.0.0": "0.7.x",
-    "unicode-5.2.0": "^0.7.5"
+    "test262-stream": "~1.3.0",
+    "unicode-5.2.0": "^0.7.5",
+    "unicode-11.0.0": "0.7.x"
   },
-  "license": "(MIT AND JSON)",
+  "license": "MIT",
   "preferGlobal": true,
   "files": [
     "bin",

@@ -537,7 +537,7 @@ exports.numbers = function (test) {
   ];
 
   TestRun(test)
-    .addError(2, 15, "Bad number '10e308'.")
+    .addError(2, 15, "Value described by numeric literal cannot be accurately represented with a number value: '10e308'.")
     .addError(5, 11, "A leading decimal point can be confused with a dot: '.3'.")
     .addError(6, 9, "Unexpected '0'.")
     .addError(7, 1, "Expected an identifier and instead saw 'var'.")
@@ -547,7 +547,7 @@ exports.numbers = function (test) {
     .addError(9, 9, "A dot following a number can be confused with a decimal point.")
     .addError(11, 9, "'Octal integer literal' is only available in ES6 (use 'esversion: 6').")
     .addError(12, 9, "'Binary integer literal' is only available in ES6 (use 'esversion: 6').")
-    .addError(13, 11, "Bad number '0x'.")
+    .addError(13, 11, "Malformed numeric literal: '0x'.")
     .addError(15, 9, "Unexpected '1'.")
     .addError(16, 11, "Expected an identifier and instead saw ';'.")
     .addError(16, 1, "Expected an identifier and instead saw 'var'.")
@@ -565,6 +565,30 @@ exports.numbers = function (test) {
       "(function () {",
       "'use strict';",
       "return 045;",
+      "}());"
+    ]);
+
+  TestRun(test)
+    .test([
+      "void 08;",
+      "void 0181;"
+    ]);
+
+  TestRun(test)
+    .addError(3, 10, "Decimals with leading zeros are not allowed in strict mode.")
+    .test([
+      "(function () {",
+      "'use strict';",
+      "return 08;",
+      "}());"
+    ]);
+
+  TestRun(test)
+    .addError(3, 12, "Decimals with leading zeros are not allowed in strict mode.")
+    .test([
+      "(function () {",
+      "'use strict';",
+      "return 0181;",
       "}());"
     ]);
 
@@ -760,6 +784,21 @@ exports.regexp.basic = function (test) {
       "void /\\08/;",
       "void /\\09/;"
     ]);
+
+  TestRun(test, "following `new`")
+    .addError(1, 5, "Bad constructor.")
+    .addError(1, 5, "Missing '()' invoking a constructor.")
+    .test("new /./;");
+
+  TestRun(test, "following `delete`")
+    .addError(1, 11, "Variables should not be deleted.")
+    .test("delete /./;");
+
+  TestRun(test, "following `extends`")
+    .test("class R extends /./ {}", {esversion: 6});
+
+  TestRun(test, "following `default`")
+    .test("export default /./;", {esversion: 6, module: true});
 
   test.done();
 };
@@ -1628,6 +1667,15 @@ exports.exported = function (test) {
     .addError(5, 16, "'f' is defined but never used.")
     .addError(5, 19, "'h' is defined but never used.")
     .test(code, {esversion: 6, unused: true});
+
+  TestRun(test, "Does not export bindings which are not accessible on the top level.")
+    .addError(2, 7, "'Moo' is defined but never used.")
+    .test([
+      "(function() {",
+      "  var Moo;",
+      "  /* exported Moo */",
+      "})();"
+    ], {unused: true});
 
   test.done();
 };
@@ -6124,6 +6172,56 @@ exports.ASI.followingPostfix = function (test) {
   test.done();
 };
 
+exports.ASI.followingContinue = function (test) {
+  var code = [
+    "while (false) {",
+    "  continue",
+    "}"
+  ];
+
+  TestRun(test)
+    .addError(2, 11, "Missing semicolon.")
+    .test(code);
+
+  TestRun(test)
+    .test(code, { asi: true });
+
+  test.done();
+};
+
+exports.ASI.followingBreak = function (test) {
+  var code = [
+    "while (false) {",
+    "  break",
+    "}"
+  ];
+
+  TestRun(test)
+    .addError(2, 8, "Missing semicolon.")
+    .test(code);
+
+  TestRun(test)
+    .test(code, { asi: true });
+
+  test.done();
+};
+
+exports.ASI.cStyleFor = function (test) {
+  TestRun(test, "following first expression")
+    .test([
+      "for (false",
+      ";;){}"
+    ]);
+
+  TestRun(test, "following second expression")
+    .test([
+      "for (false;",
+      ";){}"
+    ]);
+
+  test.done();
+};
+
 exports["fat arrows support"] = function (test) {
   var code = [
     "let empty = () => {};",
@@ -8591,7 +8689,7 @@ exports.testStrictDirectiveASI = function (test) {
     .test("'use strict';function fn() {} fn();", options);
 
   TestRun(test, 4)
-    .addError(2, 1, "Bad invocation.")
+    .addError(2, 1, "Unorthodox function invocation.")
     .addError(2, 21, "Missing \"use strict\" statement.")
     .test("'use strict'\n(function fn() {})();", options);
 
