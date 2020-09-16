@@ -1,19 +1,14 @@
 {
-  "name": "jshint",
+  "name": "jshint-ja-edu",
   "version": "2.12.0",
-  "homepage": "http://jshint.com/",
-  "description": "Static analysis tool for JavaScript",
-  "author": {
-    "name": "Anton Kovalyov",
-    "email": "anton@kovalyov.net",
-    "url": "http://anton.kovalyov.net/"
-  },
+  "description": "Japanese translation of JSHint messages for educational purpose",
+  "author": "Takuto Yanagida",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jshint/jshint.git"
+    "url": "https://github.com/takty/jshint-ja-edu.git"
   },
   "bugs": {
-    "url": "https://github.com/jshint/jshint/issues"
+    "url": "https://github.com/takty/jshint-ja-edu/issues"
   },
   "bin": {
     "jshint": "./bin/jshint"

@@ -11,7 +11,7 @@ var errors = {
   E003: "Expected a JSON value.",
   E004: "Input is neither a string nor an array of strings.",
   E005: "Input is empty.",
-  E006: "プログラムが途中で終わっています。",
+  E006: "プログラムは途中なのに、ファイルが終わってしまいました。",
 
   // Strict mode
   E007: "Missing \"use strict\" statement.",
@@ -20,9 +20,9 @@ var errors = {
   E010: "'with' is not allowed in strict mode.",
 
   // Constants
-  E011: "「{a}」はすでに宣言されています。",
-  E012: "定数「{a}」は初期化されていません。",
-  E013: "定数「{a}」に値をもう一度セットしようとしています。",
+  E011: "名前 {a} は既に別の場所で使われているので、同じ名前を付けることは出来ません。",
+  E012: "{a} は定数なので、値をセットする必要があります。",
+  E013: "{a} は定数なので、値をもう一度セットすることはできません。",
 
   // Regular expressions
   E014: "A regular expression literal can be confused with '/='.",
@@ -30,22 +30,22 @@ var errors = {
   E016: "Invalid regular expression.",
 
   // Tokens
-  E017: "Unclosed comment.",
-  E018: "Unbegun comment.",
-  E019: "ここにある「{a}」とセットになる記号がありません。",
-  E020: "Expected '{a}' to match '{b}' from line {c} and instead saw '{d}'.",
-  E021: "「{a}」があるはずなのに、「{b}」があります。",
-  E022: "Line breaking error '{a}'.",
+  E017: "コメントが閉じられていません。",
+  E018: "コメントが始まっていないのに、コメントを閉じようとしています。",
+  E019: "ここにある {a} とセットになる記号がありません。",
+  E020: "{c} 行目の {b} とセットになる {a} がありません。",
+  E021: "{a} がありません。その代わりに、{b} があります。",
+  E022: "{a} の続きが次の行にあります。",
   E023: "Missing '{a}'.",
-  E024: "「{a}」を書いてはいけません。",
-  E025: "Missing ':' on a case clause.",
-  E026: "Missing '}' to match '{' from line {a}.",
-  E027: "Missing ']' to match '[' from line {a}.",
-  E028: "Illegal comma.",
-  E029: "文字列が閉じていません。クオーテーション・マーク \' か \" が抜けていませんか？",
+  E024: "ここに {a} があるのはおかしいです。",
+  E025: "case の後にコロン : がありません。",
+  E026: "Missing '}' to match '{' from line {a}.",  // JSON
+  E027: "Missing ']' to match '[' from line {a}.",  // JSON
+  E028: "Illegal comma.",  // JSON
+  E029: "文字列が閉じていません。クォーテーション・マーク \' か \" が抜けていませんか？",
 
   // Everything else
-  E030: "識別子が期待されますが、その代わりに「{a}」があります。",
+  E030: "{a} は名前として使うことができません。",
   E031: "代入がおかしいです。", // FIXME: Rephrase
   E032: "Expected a small integer or 'false' and instead saw '{a}'.",
   E033: "Expected an operator and instead saw '{a}'.",
@@ -56,7 +56,7 @@ var errors = {
   E038: null,
   E039: "Function declarations are not invocable. Wrap the whole function invocation in parens.",
   E040: "Each value should have its own case label.",
-  E041: "書き方の間違いがあります。",
+  E041: "書き方に間違いがあります。",
   E042: "Stopping.",
   E043: "エラーが多すぎます。",
   E044: null,
@@ -90,8 +90,8 @@ var errors = {
 var warnings = {
   W001: "'hasOwnProperty' is a really bad name.",
   W002: "Value of '{a}' may be overwritten in IE 8 and earlier.",
-  W003: "「{a}」は定義される前に使われています。",
-  W004: "すでに定義されている「{a}」が、もう一度定義されています。",
+  W003: "{a} は定義される前に使われています。",
+  W004: "すでに定義されている {a} が、もう一度定義されています。",
   W005: "A dot following a number can be confused with a decimal point.",
   W006: "間違えやすいマイナス - の使い方です。",
   W007: "間違えやすいプラス + の使い方です。",
@@ -101,9 +101,9 @@ var warnings = {
   W011: null,
   W012: null,
   W013: null,
-  W014: "「{a}」の直前で改行しない方が良いでしょう。",
+  W014: "{a} の直前で改行しない方が良いでしょう。",
   W015: null,
-  W016: "「{a}」は使わない方が良いでしょう。",
+  W016: "{a} は使わない方が良いでしょう。",
   W017: "Bad operand.",
   W018: "Confusing use of '{a}'.",
   W019: "Use the isNaN function to compare with NaN.",
@@ -112,10 +112,10 @@ var warnings = {
     "Use 'var' or 'let' to declare bindings that may change.",
   W022: "Do not assign to the exception parameter.",
   W023: null,
-  W024: "Expected an identifier and instead saw '{a}' (a reserved word).",
+  W024: "この名前 {a} はJavaScript自体で使われているので、使えません。",
   W025: "関数の定義に名前がありません。",
   W026: "Inner functions should be listed at the top of the outer function.",
-  W027: "「{b}」の下の「{a}」は、実行されません。",
+  W027: "{b} の下の {a} は、実行されません。",
   W028: "Label '{a}' on {b} statement.",
   W030: "代入か関数呼び出しがあるはずなのに、式があります。",
   W031: "Do not use 'new' for side effects.",
@@ -155,7 +155,7 @@ var warnings = {
     "to assist the reader in understanding that the expression " +
     "is the result of a function, and not the function itself.",
   W063: "Math is not a function.",
-  W064: "コンストラクターの呼び出しに「new」がありません。",
+  W064: "コンストラクターの呼び出しに new がありません。",
   W065: "Missing radix parameter.",
   W066: "Implied eval. Consider passing a function instead of a string.",
   W067: "Unorthodox function invocation.",
@@ -179,7 +179,7 @@ var warnings = {
   W083: "Functions declared within loops referencing an outer scoped " +
     "variable may lead to confusing semantics. ({a})",
   W084: "条件が書いてあるはずなのに、代入が書いてあります。",
-  W085: "「with」は使わない下さい。",
+  W085: "with は使わない下さい。",
   W086: "Expected a 'break' statement before '{a}'.",
   W087: "Forgotten 'debugger' statement?",
   W088: "Creating global 'for' variable. Should be 'for (var {a} ...'.",
@@ -208,9 +208,9 @@ var warnings = {
   W112: "文字列が閉じていません。クオーテーション・マーク \' か \" が抜けていませんか？",
   W113: "Control character in string: {a}.",
   W114: "Avoid {a}.",
-  W115: "Octal literals are not allowed in strict mode.",
-  W116: "この「{b}」は、「{a}」の間違いではありませんか？",
-  W117: "「{a}」が定義されていません。",
+  W115: "数値の始めに0があるのはおかしいです。",
+  W116: "この {b} は、{a} の間違いではありませんか？",
+  W117: "{a} は定義されていません。",
   W118: "'{a}' is only available in Mozilla JavaScript extensions (use moz option).",
   W119: "'{a}' is only available in ES{b} (use 'esversion: {b}').",
   W120: "You might be leaking a variable ({a}) here.",
