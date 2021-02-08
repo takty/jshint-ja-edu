@@ -37,7 +37,7 @@ var errors = {
   E021: "{a} がありません。その代わりに、{b} があります。",
   E022: "{a} の続きが次の行にあります。",
   E023: "Missing '{a}'.",
-  E024: "ここに {a} があるのはおかしいです。",
+  E024: "ここに {a} があるのは間違いです。",
   E025: "case の後にコロン : がありません。",
   E026: "Missing '}' to match '{' from line {a}.",  // JSON
   E027: "Missing ']' to match '[' from line {a}.",  // JSON
@@ -46,7 +46,7 @@ var errors = {
 
   // Everything else
   E030: "{a} は名前として使うことができません。",
-  E031: "代入がおかしいです。", // FIXME: Rephrase
+  E031: "代入に間違いがあります。", // FIXME: Rephrase
   E032: "Expected a small integer or 'false' and instead saw '{a}'.",
   E033: "Expected an operator and instead saw '{a}'.",
   E034: "get/set are ES5 features.",
@@ -208,7 +208,7 @@ var warnings = {
   W112: "文字列が閉じていません。クオーテーション・マーク \' か \" が抜けていませんか？",
   W113: "Control character in string: {a}.",
   W114: "Avoid {a}.",
-  W115: "数値の始めに0があるのはおかしいです。",
+  W115: "数値の始めに0があるのは間違いです。",
   W116: "この {b} は、{a} の間違いではありませんか？",
   W117: "{a} は定義されていません。",
   W118: "'{a}' is only available in Mozilla JavaScript extensions (use moz option).",
@@ -226,7 +226,7 @@ var warnings = {
     "different variable name to avoid migration issues.",
   W130: "Invalid element after rest element.",
   W131: "Invalid parameter after rest parameter.",
-  W132: "`var` declarations are forbidden. Use `let` or `const` instead.",
+  W132: "「var」による定義は禁止されています。代わりに、「let」や「const」を使ってください。",
   W133: "Invalid for-{a} loop left-hand-side: {b}.",
   W134: "The '{a}' option is only available when linting ECMAScript {b} code.",
   W135: "{a} may not be supported by non-browser environments.",
